@@ -19,6 +19,7 @@
 package ddf.minim.javasound;
 
 import java.io.ByteArrayInputStream;
+import javax.sound.sampled.AudioSystem;
 import java.io.File;
 import java.io.IOException;
 import java.nio.FloatBuffer;
@@ -27,10 +28,7 @@ import java.util.ArrayList;
 import javax.sound.sampled.AudioFileFormat;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
-import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.SourceDataLine;
-
-import org.tritonus.share.sampled.AudioUtils;
 
 import ddf.minim.Minim;
 import ddf.minim.spi.AudioRecordingStream;
@@ -101,38 +99,23 @@ final class JSBufferedSampleRecorder implements SampleRecorder
    */
   public AudioRecordingStream save()
   {
-    if ( isRecording() )
-    {
-      system.error("You must stop recording before you can write to a file.");
-    }
-    else
-    {
+    try {
       int channels = format.getChannels();
       int length = left.capacity();
-      int totalSamples = ( buffers.size() / channels ) * length;
-      FloatSampleBuffer fsb = new FloatSampleBuffer(channels,
-                                                    totalSamples,
-                                                    format.getSampleRate());
-      if ( channels == 1 )
-      {
-        for (int i = 0; i < buffers.size(); i++)
-        {
-          int offset = i*length;
-          FloatBuffer fb = (FloatBuffer)buffers.get(i);
+      int totalSamples = (buffers.size() / channels) * length;
+      FloatSampleBuffer fsb = new FloatSampleBuffer(channels, totalSamples, format.getSampleRate());
+      if (channels == 1) {
+        for (int i = 0; i < buffers.size(); i++) {
+          int offset = i * length;
+          FloatBuffer fb = (FloatBuffer) buffers.get(i);
           fb.rewind();
-          // copy all the floats in fb to the first channel
-          // of fsb, starting at the index offset, and copy
-          // the whole FloatBuffer over.
           fb.get(fsb.getChannel(0), offset, length);
         }
-      }
-      else
-      {
-        for (int i = 0; i < buffers.size(); i+=2)
-        {
-          int offset = (i/2)*length;
-          FloatBuffer fbL = (FloatBuffer)buffers.get(i);
-          FloatBuffer fbR = (FloatBuffer)buffers.get(i+1);
+      } else {
+        for (int i = 0; i < buffers.size(); i += 2) {
+          int offset = (i / 2) * length;
+          FloatBuffer fbL = (FloatBuffer) buffers.get(i);
+          FloatBuffer fbR = (FloatBuffer) buffers.get(i + 1);
           fbL.rewind();
           fbL.get(fsb.getChannel(0), offset, length);
           fbR.rewind();
@@ -142,40 +125,21 @@ final class JSBufferedSampleRecorder implements SampleRecorder
       int sampleFrames = fsb.getByteArrayBufferSize(format) / format.getFrameSize();
       ByteArrayInputStream bais = new ByteArrayInputStream(fsb.convertToByteArray(format));
       AudioInputStream ais = new AudioInputStream(bais, format, sampleFrames);
-      if (AudioSystem.isFileTypeSupported(type, ais))
-      {
-        File out = new File( name );
-        try
-        {
-          AudioSystem.write(ais, type, out);
-        }
-        catch (IOException e)
-        {
-          system.error("AudioRecorder.save: Error attempting to save buffer to "
-              + name + "\n" + e.getMessage());
-        }
-        if (out.length() == 0)
-        {
-          system.error("AudioRecorder.save: Error attempting to save buffer to "
-              + name + ", the output file is empty.");
-        }
-      }
-      else
-      {
-        system.error("AudioRecorder.save: Can't write " + type.toString()
-            + " using format " + format.toString() + ".");
-      }
+      String filePath = filePath();
+      File file = new File(filePath);
+      AudioSystem.write(ais, AudioFileFormat.Type.WAVE, file);
+      ais.close();
+      // Prepare for playback/streaming
+      AudioInputStream playAis = AudioSystem.getAudioInputStream(file);
+      SourceDataLine sdl = system.getSourceDataLine(playAis.getFormat(), 1024);
+      long lengthMillis = (long)((playAis.getFrameLength() * 1000.0) / format.getFrameRate());
+      BasicMetaData meta = new BasicMetaData(filePath, lengthMillis, playAis.getFrameLength());
+      JSPCMAudioRecordingStream recording = new JSPCMAudioRecordingStream(system, meta, playAis, sdl, 1024);
+      return recording;
+    } catch (Exception e) {
+      Minim.error("AudioRecorder.save: An error occurred when trying to save the file:\n" + e.getMessage());
+      return null;
     }
-    
-    String filePath = filePath();
-    AudioInputStream ais = system.getAudioInputStream(filePath);
-    SourceDataLine sdl = system.getSourceDataLine(ais.getFormat(), 1024);
-    // this is fine because the recording will always be 
-    // in a raw format (WAV, AU, etc).
-    long length = AudioUtils.frames2Millis(ais.getFrameLength(), format);
-    BasicMetaData meta = new BasicMetaData(filePath, length, ais.getFrameLength());
-    JSPCMAudioRecordingStream recording = new JSPCMAudioRecordingStream(system, meta, ais, sdl, 1024);
-    return recording;
   }
 
   public void samples(float[] samp)

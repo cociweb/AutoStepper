@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.autostepper</groupId>
     <artifactId>autostepper</artifactId>
-    <version>1.0.0</version>
+    <version>2.0.0</version>
     <packaging>jar</packaging>
     <name>AutoStepper</name>
     <properties>
@@ -12,6 +12,17 @@
         <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
+    <repositories>
+        <repository>
+            <id>central</id>
+            <name>Maven Central</name>
+            <url>https://repo.maven.apache.org/maven2</url>
+        </repository>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+    </repositories>
     <dependencies>
         <dependency>
             <groupId>org.jsoup</groupId>
@@ -23,48 +34,25 @@
             <artifactId>jopt-simple</artifactId>
             <version>5.0.4</version>
         </dependency>
-        <!-- Local JARs (not in Maven Central) -->
         <dependency>
-            <groupId>minim</groupId>
+            <groupId>ddf.minim</groupId>
             <artifactId>jsminim</artifactId>
             <version>1.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/lib/jsminim.jar</systemPath>
         </dependency>
         <dependency>
-            <groupId>jl</groupId>
-            <artifactId>jl1.0.1</artifactId>
-            <version>1.0.1</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/lib/jl1.0.1.jar</systemPath>
-        </dependency>
-        <dependency>
-            <groupId>mp3spi</groupId>
-            <artifactId>mp3spi1.9.5</artifactId>
-            <version>1.9.5</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/lib/mp3spi1.9.5.jar</systemPath>
-        </dependency>
-        <dependency>
-            <groupId>tritonus</groupId>
-            <artifactId>tritonus_aos</artifactId>
-            <version>1.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/lib/tritonus_aos.jar</systemPath>
-        </dependency>
-        <dependency>
-            <groupId>tritonus</groupId>
-            <artifactId>tritonus_share</artifactId>
-            <version>1.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/lib/tritonus_share.jar</systemPath>
-        </dependency>
-        <dependency>
-            <groupId>trove</groupId>
-            <artifactId>trove</artifactId>
+            <groupId>net.sf.trove4j</groupId>
+            <artifactId>trove4j</artifactId>
             <version>3.0.3</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/lib/trove-3.0.3.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>com.googlecode.soundlibs</groupId>
+            <artifactId>mp3spi</artifactId>
+            <version>1.9.5-1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.googlecode.soundlibs</groupId>
+            <artifactId>tritonus-share</artifactId>
+            <version>0.3.7-3</version>
         </dependency>
     </dependencies>
     <build>
@@ -90,9 +78,66 @@
                             <mainClass>autostepper.AutoStepper</mainClass>
                         </manifest>
                     </archive>
-                    <outputDirectory>${project.basedir}/dist</outputDirectory>
+                    <outputDirectory>${project.basedir}/build</outputDirectory>
                     <finalName>AutoStepper</finalName>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>copy-dependencies</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.basedir}/build/lib</outputDirectory>
+                            <includeScope>runtime</includeScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <finalName>AutoStepper-with-deps</finalName>
+                            <outputDirectory>${project.basedir}/build</outputDirectory>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>autostepper.AutoStepper</mainClass>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                            </transformers>
+                            <artifactSet>
+                                <includes>
+                                    <include>*:*</include>
+                                </includes>
+                            </artifactSet>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <shadedArtifactAttached>false</shadedArtifactAttached>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

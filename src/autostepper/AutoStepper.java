@@ -68,6 +68,7 @@ public class AutoStepper {
     
     public static void main(String[] args) {
         minim = new Minim(myAS);
+        minim.debugOn();
         String outputDir, input;
         float duration;
         System.out.println("Starting AutoStepper by Phr00t's Software, v1.7 (See www.phr00t.com for more goodies!)");
@@ -211,7 +212,11 @@ public class AutoStepper {
     }
       
     public void AddCommonBPMs(TFloatArrayList common, TFloatArrayList times, float doubleSpeed, float timePerSample) {
-        float commonBPM = 60f / getMostCommon(calculateDifferences(times, doubleSpeed), timePerSample, true);
+        float period = getMostCommon(calculateDifferences(times, doubleSpeed), timePerSample, true);
+        if ( period <= 0f || Float.isNaN(period) || Float.isInfinite(period) ) {
+            return;
+        }
+        float commonBPM = 60f / period;
         if( commonBPM > MAX_BPM ) {
             common.add(commonBPM * 0.5f);
         } else if( commonBPM < MIN_BPM / 2f ) {
@@ -286,8 +291,15 @@ public class AutoStepper {
       int totalSamples = (int)( songTime * stream.getFormat().getSampleRate() );
       float timePerSample = fftSize / stream.getFormat().getSampleRate();
 
-      // now we'll analyze the samples in chunks
-      int totalChunks = (totalSamples / fftSize) + 1;
+      // For streams with unknown length (like MP3), use the requested duration
+      if (totalSamples <= 0) {
+        totalSamples = (int)(seconds * stream.getFormat().getSampleRate());
+        songTime = seconds;
+      }
+
+      int totalChunks = Math.min((totalSamples / fftSize) + 1, (int)(seconds * stream.getFormat().getSampleRate() / fftSize) + 1);
+
+      System.out.println("Processing " + totalChunks + " chunks for " + songTime + " seconds");
 
       System.out.println("Performing Beat Detection...");
       for(int i=0;i<fewTimes.length;i++) {
@@ -300,8 +312,18 @@ public class AutoStepper {
       float largestAvg = 0f, largestMax = 0f;
       int lowFreq = fft.freqToIndex(300f);
       int highFreq = fft.freqToIndex(3000f);
+      int consecutiveNoData = 0;
       for(int chunkIdx = 0; chunkIdx < totalChunks; ++chunkIdx) {
-        stream.read( buffer );
+        int framesRead = stream.read( buffer );
+        if (framesRead <= 0) {
+          consecutiveNoData++;
+          if (consecutiveNoData > 10) {
+            System.out.println("No data read for 10 consecutive chunks, stopping analysis");
+            break;
+          }
+          continue;
+        }
+        consecutiveNoData = 0; // reset counter
         float[] data = buffer.getChannel(0);
         float time = chunkIdx * timePerSample;
         // now analyze the left channel
@@ -387,6 +409,10 @@ public class AutoStepper {
             return;
         }      
         BPM = Math.round(getMostCommon(common, 0.5f, true));
+        if ( BPM <= 0f || Float.isNaN(BPM) || Float.isInfinite(BPM) ) {
+            System.out.println("[--- FAILED: INVALID BPM ---]");
+            return;
+        }
         timePerBeat = 60f / BPM;
         TFloatArrayList startTimes = new TFloatArrayList();
         for(int i=0;i<fewTimes.length;i++) {

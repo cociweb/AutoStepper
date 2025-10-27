@@ -26,7 +26,6 @@ import javax.sound.sampled.AudioFileFormat;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.Mixer;
 
-import org.tritonus.share.sampled.AudioUtils;
 
 import ddf.minim.javasound.JSMinim;
 import ddf.minim.spi.AudioOut;
@@ -651,73 +650,56 @@ public class Minim
 	 */
 	public float loadFileIntoBuffer( String filename, MultiChannelBuffer outBuffer )
 	{
-		final int readBufferSize 		= 4096;
-		float     sampleRate 			= 0;
-		AudioRecordingStream  stream 	= mimp.getAudioRecordingStream( filename, readBufferSize, false );
-		if ( stream != null )
+		final int readBufferSize = 4096;
+		float sampleRate = 0;
+		AudioRecordingStream stream = mimp.getAudioRecordingStream(filename, readBufferSize, false);
+		if (stream != null)
 		{
-			//stream.open();
 			stream.play();
 			sampleRate = stream.getFormat().getSampleRate();
 			final int channelCount = stream.getFormat().getChannels();
-			// for reading the file in, in chunks.
-			MultiChannelBuffer readBuffer = new MultiChannelBuffer( channelCount, readBufferSize );
-			// make sure the out buffer is the correct size and type.
-			outBuffer.setChannelCount( channelCount );
-			// how many samples to read total
+			MultiChannelBuffer readBuffer = new MultiChannelBuffer(channelCount, readBufferSize);
+			outBuffer.setChannelCount(channelCount);
 			long totalSampleCount = stream.getSampleFrameLength();
-			if ( totalSampleCount == -1 )
+			if (totalSampleCount == -1)
 			{
-				totalSampleCount = AudioUtils.millis2Frames( stream.getMillisecondLength(), stream.getFormat() );
+				totalSampleCount = (long)(((stream.getMillisecondLength() / 1000.0) * stream.getFormat().getFrameRate()));
 			}
-			debug( "Total sample count for " + filename + " is " + totalSampleCount );
-			outBuffer.setBufferSize( (int)totalSampleCount );
-			
-			// now read in chunks.
+			debug("Total sample count for " + filename + " is " + totalSampleCount);
+			outBuffer.setBufferSize((int) totalSampleCount);
 			long totalSamplesRead = 0;
-			while( totalSamplesRead < totalSampleCount )
+			while (totalSamplesRead < totalSampleCount)
 			{
-				// is the remainder smaller than our buffer?
-				if ( totalSampleCount - totalSamplesRead < readBufferSize )
+				if (totalSampleCount - totalSamplesRead < readBufferSize)
 				{
-					readBuffer.setBufferSize( (int)(totalSampleCount - totalSamplesRead) );
+					readBuffer.setBufferSize((int) (totalSampleCount - totalSamplesRead));
 				}
-				
-				int samplesRead = stream.read( readBuffer );
-				
-				if ( samplesRead == 0 )
+				int samplesRead = stream.read(readBuffer);
+				if (samplesRead == 0)
 				{
-					debug( "loadSampleIntoBuffer: got 0 samples read" );
+					debug("loadSampleIntoBuffer: got 0 samples read");
 					break;
 				}
-				
-				// copy data from one buffer to the other.
-				for(int i = 0; i < channelCount; ++i)
+				for (int i = 0; i < channelCount; ++i)
 				{
-					// a faster way to do this would be nice.
-					for(int s = 0; s < samplesRead; ++s)
+					for (int s = 0; s < samplesRead; ++s)
 					{
-						outBuffer.setSample( i, (int)totalSamplesRead+s, readBuffer.getSample( i, s ) );
+						outBuffer.setSample(i, (int) totalSamplesRead + s, readBuffer.getSample(i, s));
 					}
 				}
-				
 				totalSamplesRead += samplesRead;
 			}
-			
-			if ( totalSamplesRead != totalSampleCount )
+			if (totalSamplesRead != totalSampleCount)
 			{
-				outBuffer.setBufferSize( (int)totalSamplesRead );
+				outBuffer.setBufferSize((int) totalSamplesRead);
 			}
-			
-			debug("loadSampleIntoBuffer: final output buffer size is " + outBuffer.getBufferSize() );
-			
+			debug("loadSampleIntoBuffer: final output buffer size is " + outBuffer.getBufferSize());
 			stream.close();
 		}
-	    else
-	    {
-	        debug("Unable to load an AudioRecordingStream for " + filename);
-	    }
-
+		else
+		{
+			debug("Unable to load an AudioRecordingStream for " + filename);
+		}
 		return sampleRate;
 	}
 	

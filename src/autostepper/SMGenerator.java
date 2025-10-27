@@ -28,7 +28,7 @@ public class SMGenerator {
             "#SUBTITLETRANSLIT:;\n" +
             "#ARTISTTRANSLIT:;\n" +
             "#GENRE:;\n" +
-            "#CREDIT:AutoStepper by phr00t.com;\n" +
+            "#CREDIT:cociweb;\n" +
             "#BANNER:$BGIMAGE;\n" +
             "#BACKGROUND:$BGIMAGE;\n" +
             "#LYRICSPATH:;\n" +

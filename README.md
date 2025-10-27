@@ -8,9 +8,45 @@ AutoStepper is a Java console program designed to automatically create StepMania
     Multiple beat detection methods
     Cross-platform support
 
-So, here it is -- AutoStepper by Phr00t's Software (www.phr00t.com). You can get the whole built program under the "dist" folder.
+So, here it is -- AutoStepper by Phr00t's Software (www.phr00t.com). You can build AutoStepper.jar from source using either Maven or javac. The output JAR and compiled classes will be placed in the `build/` directory.
 
-It works on a common line with arguments, which are all optional. If you just run the Java program, it will scan & process all mp3s (and wavs) in the current directory, and spit out folders for each song in the same directory (90 seconds worth of steps).
+## Building with Maven (Recommended)
+
+Ensure you have Java 25 (OpenJDK 25) and Maven installed.
+
+```sh
+mvn clean package
+```
+
+The output JAR will be at:
+
+    build/AutoStepper.jar
+
+## Building with javac (Manual)
+
+Ensure you have Java 25 (OpenJDK 25) installed. Run:
+
+```sh
+javac -d build -cp "lib/*" $(find src -name '*.java')
+```
+
+This compiles all sources into the `build/` directory. To create a runnable JAR (optional):
+
+```sh
+jar cfe build/AutoStepper.jar autostepper.AutoStepper -C build . -C lib .
+```
+
+## Running AutoStepper
+
+To run the program after building:
+
+```sh
+java -jar build/AutoStepper.jar [arguments]
+```
+
+Replace `[arguments]` with your desired command-line options (see below).
+
+---
 
 The arguments are:
 

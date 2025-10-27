@@ -22,8 +22,6 @@ import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.Control;
 import javax.sound.sampled.SourceDataLine;
 
-import org.tritonus.share.sampled.AudioUtils;
-
 import ddf.minim.AudioMetaData;
 import ddf.minim.Minim;
 import ddf.minim.MultiChannelBuffer;
@@ -73,8 +71,8 @@ class JSAudioRecording implements AudioRecording, Runnable
         play = false;
         numLoops = 0;
         loopBegin = 0;
-        loopEnd = (int)AudioUtils.millis2BytesFrameAligned( meta.length(),
-                format );
+        // frame-aligned bytes for the full length in millis
+        loopEnd = (int)((((meta.length() / 1000.0) * format.getFrameRate()) / format.getFrameSize()) * format.getFrameSize());
         rawBytes = new byte[sdl.getBufferSize() / 8];
         iothread = null;
         totalBytesRead = 0;
@@ -299,17 +297,17 @@ class JSAudioRecording implements AudioRecording, Runnable
         }
         if ( stop <= getMillisecondLength() && stop > start )
         {
-            loopEnd = (int)AudioUtils.millis2BytesFrameAligned( stop, format );
+            loopEnd = (int)(((stop / 1000.0) * format.getFrameRate()) / format.getFrameSize()) * format.getFrameSize();
         }
         else
         {
-            loopEnd = (int)AudioUtils.millis2BytesFrameAligned( getMillisecondLength(), format );
+            loopEnd = (int)(((getMillisecondLength() / 1000.0) * format.getFrameRate()) / format.getFrameSize()) * format.getFrameSize();
         }
     }
 
     public int getMillisecondPosition()
     {
-        return (int)AudioUtils.bytes2Millis( totalBytesRead, format );
+        return (int)((totalBytesRead * 1000.0) / (format.getFrameRate() * format.getFrameSize()));
     }
 
     public synchronized void setMillisecondPosition(int millis)
@@ -324,7 +322,7 @@ class JSAudioRecording implements AudioRecording, Runnable
         }
         else
         {
-            totalBytesRead = (int)AudioUtils.millis2BytesFrameAligned( millis, format );
+            totalBytesRead = (int)(((millis / 1000.0) * format.getFrameRate()) / format.getFrameSize()) * format.getFrameSize();
         }
     }
 

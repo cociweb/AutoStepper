@@ -26,7 +26,6 @@ import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.Control;
 import javax.sound.sampled.SourceDataLine;
 
-import org.tritonus.share.sampled.AudioUtils;
 
 import ddf.minim.AudioEffect;
 import ddf.minim.AudioListener;
@@ -107,7 +106,8 @@ abstract class JSBaseAudioRecordingStream implements Runnable,
         rawBytes = new byte[buffer.getByteArrayBufferSize( format )];
         system.debug( "JSBaseAudioRecordingStream :: rawBytes has length " + rawBytes.length );
         
-        skipBytes = new byte[ (int)AudioUtils.millis2BytesFrameAligned( 10000, format ) ];
+        // 10 seconds worth of frame-aligned bytes
+        skipBytes = new byte[(int)((int)((10000 / 1000.0) * format.getFrameRate()) * format.getFrameSize())];
         system.debug( "JSBaseAudioRecordingStream :: skipBytes has length " + skipBytes.length );
         
         finished = false;
@@ -118,7 +118,7 @@ abstract class JSBaseAudioRecordingStream implements Runnable,
         play = false;
         numLoops = 0;
         loopBegin = 0;
-        loopEnd = (int)AudioUtils.millis2BytesFrameAligned( msLen, format );
+        loopEnd = (int)((int)((msLen / 1000.0) * format.getFrameRate()) * format.getFrameSize());
         
         silence = new float[bufferSize];
         iothread = null;
@@ -507,18 +507,17 @@ abstract class JSBaseAudioRecordingStream implements Runnable,
         }
         if ( stop <= getMillisecondLength() && stop > start )
         {
-            loopEnd = (int)AudioUtils.millis2BytesFrameAligned( stop, format );
+            loopEnd = (int)((int)((stop / 1000.0) * format.getFrameRate()) * format.getFrameSize());
         }
         else
         {
-            loopEnd = (int)AudioUtils.millis2BytesFrameAligned(
-                    getMillisecondLength(), format );
+            loopEnd = (int)((int)((getMillisecondLength() / 1000.0) * format.getFrameRate()) * format.getFrameSize());
         }
     }
 
     public int getMillisecondPosition()
     {
-        int pos = (int)AudioUtils.bytes2Millis( totalBytesRead, format );
+        int pos = (int)((totalBytesRead * 1000.0) / (format.getFrameRate() * format.getFrameSize()));
         // never report a position that is greater than the length of the stream
         return Math.min( pos, getMillisecondLength() );
     }
@@ -592,7 +591,7 @@ abstract class JSBaseAudioRecordingStream implements Runnable,
 
     protected int skip(int millis)
 	{
-		long toSkip = AudioUtils.millis2BytesFrameAligned(millis, format);
+		        long toSkip = (long)((int)((millis / 1000.0) * format.getFrameRate()) * format.getFrameSize());
 		
 		if ( toSkip <= 0 ) 
 		{
@@ -640,9 +639,9 @@ abstract class JSBaseAudioRecordingStream implements Runnable,
 		{
 			system.error("Unable to skip due to read error: " + e.getMessage());
 		}
-		system.debug("Total actually skipped was " + totalSkipped + ", which is "
-					+ AudioUtils.bytes2Millis(totalSkipped, ais.getFormat())
-					+ " milliseconds.");
+		        system.debug("Total actually skipped was " + totalSkipped + ", which is "
+                    + (long)((totalSkipped * 1000.0) / (ais.getFormat().getFrameRate() * ais.getFormat().getFrameSize()))
+                    + " milliseconds.");
 		return (int)totalSkipped;
 	}
 
