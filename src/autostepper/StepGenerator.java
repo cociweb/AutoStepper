@@ -4,10 +4,7 @@ import gnu.trove.list.array.TFloatArrayList;
 import java.util.ArrayList;
 import java.util.Random;
 
-/**
- *
- * @author Phr00t
- */
+
 public class StepGenerator {
     
     static private int MAX_HOLD_BEAT_COUNT = 4;

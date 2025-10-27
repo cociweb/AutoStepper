@@ -11,16 +11,13 @@ import java.io.*;
 import java.util.ArrayList;
 import java.util.Scanner;
 
-/**
- *
- * @author Phr00t
- */
 public class AutoStepper {
     
     public static boolean DEBUG_STEPS = false;
     public static float MAX_BPM = 170f, MIN_BPM = 70f, BPM_SENSITIVITY = 0.05f, STARTSYNC = 0.0f;
     public static double TAPSYNC = -0.11;
     public static boolean USETAPPER = false, HARDMODE = false, UPDATESM = false, DOWNLOADIMAGES = false;
+    public static float CLEARANCE = 10.0f;
     
     public static Minim minim;
     public static AutoStepper myAS = new AutoStepper();
@@ -68,13 +65,13 @@ public class AutoStepper {
     
     public static void main(String[] args) {
         minim = new Minim(myAS);
-        minim.debugOn();
+        // minim.debugOn(); // Removed to disable debug messages
         String outputDir, input;
         float duration;
         System.out.println("Starting AutoStepper by cociweb (See www.github.com/cociweb/AudioStepper for more goodies!)");
         if( hasArg(args, "help") || hasArg(args, "h") || hasArg(args, "?") || hasArg(args, "-help") || hasArg(args, "-?") || hasArg(args, "-h") ) {
             System.out.println("Argument usage (all fields are optional):\n"
-                    + "input=<file or dir> output=<songs dir> duration=<seconds to process, default: 90> tap=<true/false> tapsync=<tap time offset, default: -0.11> hard=<true/false> updatesm=<true/false> downloadimages=<true/false, default: true>");
+                    + "input=<file or dir> output=<songs dir> duration=<seconds to process, default: 90, -1 for full song> tap=<true/false> tapsync=<tap time offset, default: -0.11> hard=<true/false> updatesm=<true/false> downloadimages=<true/false, default: true> clearance=<seconds to skip from start/end in full song mode, default: 30>");
             return;
         }
         MAX_BPM = Float.parseFloat(getArg(args, "maxbpm", "170f"));
@@ -89,6 +86,7 @@ public class AutoStepper {
         HARDMODE = getArg(args, "hard", "false").equals("true");
         UPDATESM = getArg(args, "updatesm", "false").equals("true");
         DOWNLOADIMAGES = getArg(args, "downloadimages", "true").equals("true");
+        CLEARANCE = Float.parseFloat(getArg(args, "clearance", "30"));
         File inputFile = new File(input);
         if( inputFile.isFile() ) {
             myAS.analyzeUsingAudioRecordingStream(inputFile, duration, outputDir);            
@@ -266,7 +264,12 @@ public class AutoStepper {
     void analyzeUsingAudioRecordingStream(File filename, float seconds, String outputDir) {
       int fftSize = 512;
       
-      System.out.println("\n[--- Processing " + seconds + "s of "+ filename.getName() + " ---]");
+      boolean fullSongMode = (seconds == -1);
+      if (fullSongMode) {
+        System.out.println("\n[--- Processing FULL SONG "+ filename.getName() + " ---]");
+      } else {
+        System.out.println("\n[--- Processing " + seconds + "s of "+ filename.getName() + " ---]");
+      }
       AudioRecordingStream stream = minim.loadFileStream(filename.getAbsolutePath(), fftSize, false);
 
       // tell it to "play" so we can read from it.
@@ -292,15 +295,24 @@ public class AutoStepper {
       int totalSamples = (int)( songTime * stream.getFormat().getSampleRate() );
       float timePerSample = fftSize / stream.getFormat().getSampleRate();
 
-      // For streams with unknown length (like MP3), use the requested duration
-      if (totalSamples <= 0) {
-        totalSamples = (int)(seconds * stream.getFormat().getSampleRate());
-        songTime = seconds;
+      // For streams with unknown length (like MP3) or full song mode, use the actual song time
+      if (totalSamples <= 0 || fullSongMode) {
+        if (fullSongMode) {
+          // Keep using songTime as calculated above
+          totalSamples = (int)(songTime * stream.getFormat().getSampleRate());
+        } else {
+          totalSamples = (int)(seconds * stream.getFormat().getSampleRate());
+          songTime = seconds;
+        }
       }
 
-      int totalChunks = Math.min((totalSamples / fftSize) + 1, (int)(seconds * stream.getFormat().getSampleRate() / fftSize) + 1);
+      int totalChunks = (totalSamples / fftSize) + 1;
+      if (!fullSongMode) {
+        // For limited duration, cap the chunks
+        totalChunks = Math.min(totalChunks, (int)(seconds * stream.getFormat().getSampleRate() / fftSize) + 1);
+      }
 
-      System.out.println("Processing " + totalChunks + " chunks for " + songTime + " seconds");
+      System.out.println("Processing " + totalChunks + " chunks for " + songTime + " seconds" + (fullSongMode ? " (full song mode)" : ""));
 
       System.out.println("Performing Beat Detection...");
       for(int i=0;i<fewTimes.length;i++) {
@@ -429,16 +441,70 @@ public class AutoStepper {
       System.out.println("Time per beat: " + timePerBeat + ", BPM: " + BPM);
       System.out.println("Start Time: " + startTime);
       
+      // For full song mode, filter beat times to skip intro and outro
+      if (fullSongMode) {
+        float skipTime = CLEARANCE; // Use configurable clearance parameter
+        float effectiveStart = skipTime;
+        float effectiveEnd = songTime - skipTime;
+        
+        System.out.println("Full song mode: skipping first " + skipTime + "s and last " + skipTime + "s (clearance parameter)");
+        System.out.println("Effective step generation range: " + effectiveStart + "s to " + effectiveEnd + "s");
+        
+        // Filter all beat time arrays to only include times within the effective range
+        for(int i=0; i<fewTimes.length; i++) {
+          TFloatArrayList filteredFew = new TFloatArrayList();
+          TFloatArrayList filteredMany = new TFloatArrayList();
+          
+          // Filter fewTimes
+          for(int j=0; j<fewTimes[i].size(); j++) {
+            float time = fewTimes[i].get(j);
+            if (time >= effectiveStart && time <= effectiveEnd) {
+              filteredFew.add(time);
+            }
+          }
+          
+          // Filter manyTimes
+          for(int j=0; j<manyTimes[i].size(); j++) {
+            float time = manyTimes[i].get(j);
+            if (time >= effectiveStart && time <= effectiveEnd) {
+              filteredMany.add(time);
+            }
+          }
+          
+          fewTimes[i] = filteredFew;
+          manyTimes[i] = filteredMany;
+        }
+        
+        // Adjust MidFFT arrays to match the filtered time range
+        int startChunk = (int)(effectiveStart / timePerSample);
+        int endChunk = (int)(effectiveEnd / timePerSample);
+        if (startChunk < MidFFTAmount.size() && endChunk < MidFFTAmount.size()) {
+          TFloatArrayList filteredFFT = new TFloatArrayList();
+          TFloatArrayList filteredFFTMax = new TFloatArrayList();
+          for(int i=startChunk; i<=endChunk && i<MidFFTAmount.size(); i++) {
+            filteredFFT.add(MidFFTAmount.get(i));
+            filteredFFTMax.add(MidFFTMaxes.get(i));
+          }
+          MidFFTAmount = filteredFFT;
+          MidFFTMaxes = filteredFFTMax;
+        }
+        
+        System.out.println("Filtered beat data - effective duration: " + (effectiveEnd - effectiveStart) + " seconds");
+      }
+      
       // start making the SM
       BufferedWriter smfile = SMGenerator.GenerateSM(BPM, startTime, filename, outputDir);
       
       if( HARDMODE ) System.out.println("Hard mode enabled! Extra steps for you! :-O");
       
-      SMGenerator.AddNotes(smfile, SMGenerator.Beginner, StepGenerator.GenerateNotes(1, HARDMODE ? 2 : 1, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, seconds, false));
-      SMGenerator.AddNotes(smfile, SMGenerator.Easy, StepGenerator.GenerateNotes(1, HARDMODE ? 3 : 2, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, seconds, false));
-      SMGenerator.AddNotes(smfile, SMGenerator.Medium, StepGenerator.GenerateNotes(2, HARDMODE ? 6 : 3, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, seconds, false));
-      SMGenerator.AddNotes(smfile, SMGenerator.Hard, StepGenerator.GenerateNotes(2, HARDMODE ? 8 : 4, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, seconds, false));
-      SMGenerator.AddNotes(smfile, SMGenerator.Challenge, StepGenerator.GenerateNotes(2, HARDMODE ? 10 : 5, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, seconds, true));
+      // Use songTime for full song mode, seconds for limited mode
+      float stepGenerationDuration = fullSongMode ? songTime : seconds;
+      
+      SMGenerator.AddNotes(smfile, SMGenerator.Beginner, StepGenerator.GenerateNotes(1, HARDMODE ? 2 : 1, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, stepGenerationDuration, false));
+      SMGenerator.AddNotes(smfile, SMGenerator.Easy, StepGenerator.GenerateNotes(1, HARDMODE ? 3 : 2, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, stepGenerationDuration, false));
+      SMGenerator.AddNotes(smfile, SMGenerator.Medium, StepGenerator.GenerateNotes(2, HARDMODE ? 6 : 3, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, stepGenerationDuration, false));
+      SMGenerator.AddNotes(smfile, SMGenerator.Hard, StepGenerator.GenerateNotes(2, HARDMODE ? 8 : 4, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, stepGenerationDuration, false));
+      SMGenerator.AddNotes(smfile, SMGenerator.Challenge, StepGenerator.GenerateNotes(2, HARDMODE ? 10 : 5, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, stepGenerationDuration, true));
       SMGenerator.Complete(smfile);
       
       System.out.println("[--------- SUCCESS ----------]");

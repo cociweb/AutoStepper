@@ -4,6 +4,8 @@ import org.jaudiotagger.audio.AudioFile;
 import org.jaudiotagger.audio.AudioFileIO;
 import org.jaudiotagger.tag.FieldKey;
 import org.jaudiotagger.tag.Tag;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.io.File;
 
 /**
@@ -17,6 +19,9 @@ public class ID3TagReader {
      * @return AudioMetadata object with title, artist, and genre
      */
     public static AudioMetadata readMetadata(File audioFile) {
+        // Disable Jaudiotagger INFO logging to reduce verbosity
+        Logger.getLogger("org.jaudiotagger").setLevel(Level.WARNING);
+        
         AudioMetadata metadata = new AudioMetadata();
 
         try {

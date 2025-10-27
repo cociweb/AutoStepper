@@ -19,10 +19,7 @@ import autostepper.MusicCatalogAPI;
 // Add import for ID3 tag reading
 import autostepper.ID3TagReader;
 
-/**
- *
- * @author Phr00t
- */
+
 public class SMGenerator {
  
     private static String Header = 

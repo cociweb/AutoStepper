@@ -1,14 +1,13 @@
 package autostepper;
 
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.FileOutputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.net.URL;
+import java.net.HttpURLConnection;
 
 public class MusicCatalogAPI {
 
@@ -30,16 +29,34 @@ public class MusicCatalogAPI {
                            java.net.URLEncoder.encode(searchTerm, "UTF-8") +
                            "&entity=song&limit=5";
 
-            Document doc = Jsoup.connect(apiUrl)
-                              .userAgent("AutoStepper/1.0")
-                              .timeout(10 * 1000)
-                              .get();
+            // Use HttpURLConnection instead of Jsoup for JSON API
+            URL url = new URL(apiUrl);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setRequestProperty("User-Agent", "AutoStepper/2.0");
+            connection.setConnectTimeout(10 * 1000);
+            connection.setReadTimeout(10 * 1000);
 
-            // Parse JSON response manually (simple approach)
-            String jsonResponse = doc.text();
+            int responseCode = connection.getResponseCode();
+            if (responseCode != 200) {
+                System.out.println("iTunes API returned HTTP " + responseCode);
+                return;
+            }
+
+            // Read the JSON response
+            BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+            StringBuilder jsonResponse = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                jsonResponse.append(line);
+            }
+            reader.close();
+            connection.disconnect();
+
+            String json = jsonResponse.toString();
 
             // Look for artworkUrl100 in the JSON response
-            String artworkUrl = extractArtworkUrl(jsonResponse);
+            String artworkUrl = extractArtworkUrl(json);
 
             if (artworkUrl != null && !artworkUrl.isEmpty()) {
                 // Get higher resolution artwork (replace 100x100 with 600x600)
