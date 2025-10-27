@@ -24,7 +24,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.net.MalformedURLException;
-import java.net.URL;
+import java.net.URI;
+import java.net.URISyntaxException;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -243,7 +245,8 @@ public class JSMinim implements MinimServiceProvider
 			}
 			else
 			{
-				recorder = new JSStreamingSampleRecorder(this,
+				// TODO: Implement JSStreamingSampleRecorder for non-buffered recording
+				recorder = new JSBufferedSampleRecorder(this,
 														 destPath,
 														 fileType,
 														 source.getFormat(),
@@ -321,7 +324,6 @@ public class JSMinim implements MinimServiceProvider
 		return mstream;
 	}
 
-	@SuppressWarnings("unchecked")
 	private Map<String, Object> getID3Tags(String filename)
 	{
 		debug("Getting the properties.");
@@ -336,7 +338,7 @@ public class JSMinim implements MinimServiceProvider
 				stream.close();
 				// If properties are available, attempt to read via reflection-safe cast
 				try {
-					Map<String, Object> p = (Map<String, Object>) baseFileFormat.properties();
+					Map<String, Object> p = baseFileFormat.properties();
 					if (p != null) props = p;
 				} catch (Exception ignore) { }
 			}
@@ -374,6 +376,7 @@ public class JSMinim implements MinimServiceProvider
 		return null;
 	}
 
+	@SuppressWarnings("deprecation")
 	public AudioSample getAudioSample(String filename, int bufferSize)
 	{
 		AudioInputStream ais = getAudioInputStream(filename);
@@ -443,6 +446,7 @@ public class JSMinim implements MinimServiceProvider
     return getAudioSampleImp(sample, format, bufferSize);
   }
   
+	@SuppressWarnings("deprecation")
   private JSAudioSample getAudioSampleImp(FloatSampleBuffer samples, AudioFormat format, int bufferSize)
   {
     AudioOut out = getAudioOutput( samples.getChannelCount(), 
@@ -653,9 +657,10 @@ public class JSMinim implements MinimServiceProvider
 		{
 			try
 			{
-				ais = getAudioInputStream(new URL(filename));
+				URI uri = new URI(filename);
+				ais = getAudioInputStream(uri);
 			}
-			catch (MalformedURLException e)
+			catch (URISyntaxException | MalformedURLException e)
 			{
 				error("Bad URL: " + e.getMessage());
 			}
@@ -713,11 +718,11 @@ public class JSMinim implements MinimServiceProvider
 	 * @throws UnsupportedAudioFileException
 	 * @throws IOException
 	 */
-	AudioInputStream getAudioInputStream(URL url)
+	AudioInputStream getAudioInputStream(URI uri)
 			throws UnsupportedAudioFileException, IOException
 	{
 		// Use standard AudioSystem for URL input
-		return AudioSystem.getAudioInputStream(url);
+		return AudioSystem.getAudioInputStream(uri.toURL());
 	}
 
 	/**

@@ -28,12 +28,12 @@
             "settings": {
                 "java.configuration.runtimes": [
                     {
-                        "name": "JavaSE-25",
-                        "path": "/usr/lib/jvm/java-25-openjdk-amd64",
+                        "name": "JavaSE-21",
+                        "path": "/usr/lib/jvm/java-21-openjdk-amd64",
                         "default": true
                     }
                 ],
-                "java.jdt.ls.java.home": "/usr/lib/jvm/java-25-openjdk-amd64",
+                "java.jdt.ls.java.home": "/usr/lib/jvm/java-21-openjdk-amd64",
                 "java.configuration.updateBuildConfiguration": "automatic",
                 "java.import.gradle.wrapper.enabled": false,
                 "java.import.maven.enabled": true,
@@ -53,8 +53,8 @@
     },
     "postCreateCommand": "mvn clean install -DskipTests",
     "remoteEnv": {
-        "JAVA_HOME": "/usr/lib/jvm/java-25-openjdk-amd64",
-        "PATH": "${containerEnv:PATH}:/usr/lib/jvm/java-25-openjdk-amd64/bin"
+        "JAVA_HOME": "/usr/lib/jvm/java-21-openjdk-amd64",
+        "PATH": "${containerEnv:PATH}:/usr/lib/jvm/java-21-openjdk-amd64/bin"
     },
     "forwardPorts": [],
     "portsAttributes": {},

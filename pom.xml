@@ -8,8 +8,8 @@
     <packaging>jar</packaging>
     <name>AutoStepper</name>
     <properties>
-        <maven.compiler.source>25</maven.compiler.source>
-        <maven.compiler.target>25</maven.compiler.target>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
     <repositories>
@@ -35,11 +35,6 @@
             <version>5.0.4</version>
         </dependency>
         <dependency>
-            <groupId>ddf.minim</groupId>
-            <artifactId>jsminim</artifactId>
-            <version>1.0</version>
-        </dependency>
-        <dependency>
             <groupId>net.sf.trove4j</groupId>
             <artifactId>core</artifactId>
             <version>3.1.0</version>
@@ -55,9 +50,9 @@
             <version>0.3.7.4</version>
         </dependency>
         <dependency>
-            <groupId>org</groupId>
+            <groupId>net.jthink</groupId>
             <artifactId>jaudiotagger</artifactId>
-            <version>2.0.3</version>
+            <version>3.0.1</version>
         </dependency>
     </dependencies>
     <build>
@@ -68,7 +63,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <release>25</release>
+                    <release>21</release>
                     <compilerArgs>
                         <arg>--add-opens</arg>
                         <arg>java.base/sun.misc=ALL-UNNAMED</arg>

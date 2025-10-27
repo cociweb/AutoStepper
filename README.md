@@ -50,11 +50,11 @@ Replace `[arguments]` with your desired command-line options (see below).
 
 The arguments are:
 
-    input=[file/dir] output=[songs dir] duration=[seconds to process] tap=[true/false] tapsync=[offset time in seconds for tap, default: -0.11] hard=[true/false] updatesm=[true/false]
+    input=[file/dir] output=[songs dir] duration=[seconds to process] tap=[true/false] tapsync=[offset time in seconds for tap, default: -0.11] clearence=[seconds to keep clear] hard=[true/false] updatesm=[true/false]
     
 Example:
 
-    java -jar AutoStepper.jar input="./songs/" duration=130 hard=true
+    java -jar ./dist/AutoStepper.jar input="./songs/" output="./SM/" duration=-1 hard=false clearence=10 tap=false
 
 If you set tap=true, AutoStepper won't try and automatically calculate the BPM or offset, and will instead prompt you to hit ENTER along with 30 consecutive beats. AutoStepper will then do the rest.
 
