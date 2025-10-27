@@ -19,6 +19,7 @@
 package ddf.minim.javasound;
 
 import java.io.BufferedInputStream;
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -330,17 +331,26 @@ public class JSMinim implements MinimServiceProvider
 		Map<String, Object> props = new HashMap<String, Object>();
 		try
 		{
+			// Try to get file format directly from file for accurate metadata
+			AudioFileFormat baseFileFormat = AudioSystem.getAudioFileFormat(new File(filename));
+			// If properties are available, get them
+			try {
+				Map<String, Object> p = baseFileFormat.properties();
+				if (p != null) props = p;
+			} catch (Exception ignore) { }
+			// If duration not in properties, calculate from frameLength and frameRate
+			if (!props.containsKey("duration")) {
+				long frameLength = baseFileFormat.getFrameLength();
+				float frameRate = baseFileFormat.getFormat().getFrameRate();
+				if (frameLength > 0 && frameRate > 0) {
+					long durationMicros = (long)((frameLength / frameRate) * 1000000);
+					props.put("duration", durationMicros);
+				}
+			}
+			// Now open stream for additional processing if needed
 			InputStream stream = (InputStream)createInput.invoke(fileLoader, filename);
-			if ( stream != null )
-			{
-				// Try to get file format; not all implementations expose properties.
-				AudioFileFormat baseFileFormat = AudioSystem.getAudioFileFormat(stream);
-				stream.close();
-				// If properties are available, attempt to read via reflection-safe cast
-				try {
-					Map<String, Object> p = baseFileFormat.properties();
-					if (p != null) props = p;
-				} catch (Exception ignore) { }
+			if (stream != null) {
+				stream.close(); // close immediately since we have the format
 			}
 		}
 		catch (UnsupportedAudioFileException e)
@@ -402,10 +412,15 @@ public class JSMinim implements MinimServiceProvider
 				// be much shorter than the decoded version. so we use the
 				// duration of the file to figure out how many bytes the
 				// decoded file will be.
-				long dur = ((Long)props.get("duration")).longValue();
-				int toRead = (int)(((dur / 1000.0) * format.getFrameRate()) * format.getFrameSize());
-				samples = loadFloatAudio(ais, toRead);
-				meta = new MP3MetaData(filename, dur / 1000, props);
+				if (props.containsKey("duration")) {
+					long dur = ((Long)props.get("duration")).longValue();
+					int toRead = (int)(((dur / 1000.0) * format.getFrameRate()) * format.getFrameSize());
+					samples = loadFloatAudio(ais, toRead);
+					meta = new MP3MetaData(filename, dur / 1000, props);
+				} else {
+					error("Cannot load MP3 file without duration metadata.");
+					return null;
+				}
 			}
 			else
 			{

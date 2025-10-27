@@ -287,7 +287,7 @@ public class StepGenerator {
         int _stepCount = AllNotes.length() - AllNotes.replace("1", "").length();
         int _holdCount = AllNotes.length() - AllNotes.replace("2", "").length();
         int _mineCount = AllNotes.length() - AllNotes.replace("M", "").length();
-        System.out.println("Steps: " + _stepCount + ", Holds: " + _holdCount + ", Mines: " + _mineCount);
+        System.out.println("Taps: " + _stepCount + ", Holds: " + _holdCount + ", Mines: " + _mineCount);
         return AllNotes;
     }
     
