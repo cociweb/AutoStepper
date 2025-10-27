@@ -64,6 +64,10 @@
                 <version>3.11.0</version>
                 <configuration>
                     <release>25</release>
+                    <compilerArgs>
+                        <arg>--add-opens</arg>
+                        <arg>java.base/sun.misc=ALL-UNNAMED</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
             <plugin>
@@ -113,6 +117,7 @@
                         <configuration>
                             <finalName>AutoStepper-with-deps</finalName>
                             <outputDirectory>${project.basedir}/build</outputDirectory>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>autostepper.AutoStepper</mainClass>

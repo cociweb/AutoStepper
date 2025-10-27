@@ -15,11 +15,12 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up JDK 25
+    - name: Set up JDK 25 and Maven
       uses: actions/setup-java@v4
       with:
         java-version: '25'
         distribution: 'temurin'
+        maven-version: '3.9.6'
         cache: maven
 
     - name: Build with Maven
