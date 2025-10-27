@@ -1,5 +1,4 @@
 build/
-songs/
-SM/
+songs/*
+SM/*
 target/
-sources.txt
