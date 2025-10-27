@@ -162,14 +162,29 @@ public class SMGenerator {
         String imgFileName = "";
         if( imgFile.exists() == false && AutoStepper.DOWNLOADIMAGES ) {
             System.out.println("Attempting to get image for background & banner...");
+            
+            // Create better search terms using ID3 metadata when available
+            String searchTerm = "";
+            if (!title.isEmpty() && !artist.isEmpty()) {
+                searchTerm = artist + " " + title;  // Best: "Artist Title"
+            } else if (!title.isEmpty()) {
+                searchTerm = title;  // Good: Just title
+            } else if (!artist.isEmpty()) {
+                searchTerm = artist;  // OK: Just artist
+            } else {
+                searchTerm = songname;  // Fallback: cleaned filename
+            }
+            
+            System.out.println("Searching for album art with: '" + searchTerm + "'");
+            
             try {
                 // Try iTunes API first (better results)
-                MusicCatalogAPI.findAlbumArt(songname, imgFile.getAbsolutePath());
+                MusicCatalogAPI.findAlbumArt(searchTerm, imgFile.getAbsolutePath());
             } catch (Exception e) {
                 System.out.println("iTunes API failed: " + e.getMessage());
                 try {
                     // Fallback to Google Images
-                    GoogleImageSearch.FindAndSaveImage(songname, imgFile.getAbsolutePath());
+                    GoogleImageSearch.FindAndSaveImage(searchTerm, imgFile.getAbsolutePath());
                 } catch (Exception e2) {
                     System.out.println("All image search methods failed: " + e2.getMessage());
                 }

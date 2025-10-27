@@ -24,6 +24,8 @@ public class MusicCatalogAPI {
                                       .replace("-", " ").replace("_", " ")
                                       .replace("&", " ").trim();
 
+            System.out.println("iTunes search term: '" + searchTerm + "'");
+
             // Use iTunes Search API (free, no API key needed)
             String apiUrl = "https://itunes.apple.com/search?term=" +
                            java.net.URLEncoder.encode(searchTerm, "UTF-8") +
