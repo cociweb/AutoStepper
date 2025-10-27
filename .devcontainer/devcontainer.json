@@ -1,0 +1,64 @@
+{
+    "name": "AutoStepper Development",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "features": {
+        "ghcr.io/devcontainers/features/common-utils:2": {
+            "installZsh": true,
+            "username": "vscode",
+            "uid": "1000",
+            "gid": "1000"
+        },
+        "ghcr.io/devcontainers/features/git:1": {
+            "version": "latest",
+            "ppa": true
+        }
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "vscjava.vscode-java-pack",
+                "vscjava.vscode-maven",
+                "vscjava.vscode-checkstyle",
+                "sonarsource.sonarlint-vscode",
+                "redhat.java"
+            ],
+            "settings": {
+                "java.configuration.runtimes": [
+                    {
+                        "name": "JavaSE-25",
+                        "path": "/usr/lib/jvm/java-25-openjdk-amd64",
+                        "default": true
+                    }
+                ],
+                "java.jdt.ls.java.home": "/usr/lib/jvm/java-25-openjdk-amd64",
+                "java.configuration.updateBuildConfiguration": "automatic",
+                "java.import.gradle.wrapper.enabled": false,
+                "java.import.maven.enabled": true,
+                "java.autobuild.enabled": true,
+                "java.completion.importOrder": [
+                    "java",
+                    "javax",
+                    "com",
+                    "org"
+                ],
+                "java.checkstyle.configuration": "${workspaceFolder}/google_checks.xml",
+                "java.checkstyle.version": "10.12.1",
+                "editor.formatOnSave": true,
+                "editor.defaultFormatter": "redhat.java"
+            }
+        }
+    },
+    "postCreateCommand": "mvn clean install -DskipTests",
+    "remoteEnv": {
+        "JAVA_HOME": "/usr/lib/jvm/java-25-openjdk-amd64",
+        "PATH": "${containerEnv:PATH}:/usr/lib/jvm/java-25-openjdk-amd64/bin"
+    },
+    "forwardPorts": [],
+    "portsAttributes": {},
+    "postStartCommand": "echo 'Container ready!', mvn clean install -DskipTests",
+    "remoteUser": "vscode",
+    "updateRemoteUserUID": true
+}
