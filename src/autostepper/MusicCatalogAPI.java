@@ -6,6 +6,7 @@ import java.io.OutputStream;
 import java.io.FileOutputStream;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.net.URI;
 import java.net.URL;
 import java.net.HttpURLConnection;
 
@@ -24,7 +25,7 @@ public class MusicCatalogAPI {
                                       .replace("-", " ").replace("_", " ")
                                       .replace("&", " ").trim();
 
-            System.out.println("iTunes search term: '" + searchTerm + "'");
+            if (AutoStepper.STEP_DEBUG) System.out.println("iTunes search term: '" + searchTerm + "'");
 
             // Use iTunes Search API (free, no API key needed)
             String apiUrl = "https://itunes.apple.com/search?term=" +
@@ -32,7 +33,7 @@ public class MusicCatalogAPI {
                            "&entity=song&limit=5";
 
             // Use HttpURLConnection instead of Jsoup for JSON API
-            URL url = new URL(apiUrl);
+            URL url = URI.create(apiUrl).toURL();
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("GET");
             connection.setRequestProperty("User-Agent", "AutoStepper/2.0");
@@ -41,7 +42,7 @@ public class MusicCatalogAPI {
 
             int responseCode = connection.getResponseCode();
             if (responseCode != 200) {
-                System.out.println("iTunes API returned HTTP " + responseCode);
+                if (AutoStepper.STEP_DEBUG) System.out.println("iTunes API returned HTTP " + responseCode);
                 return;
             }
 
@@ -64,13 +65,13 @@ public class MusicCatalogAPI {
                 // Get higher resolution artwork (replace 100x100 with 600x600)
                 artworkUrl = artworkUrl.replace("100x100bb", "600x600bb");
                 saveImage(artworkUrl, destinationFile);
-                System.out.println("Downloaded album art from iTunes!");
+                if (AutoStepper.STEP_DEBUG) System.out.println("Downloaded album art from iTunes!");
             } else {
-                System.out.println("No album art found in iTunes API response");
+                if (AutoStepper.STEP_DEBUG) System.out.println("No album art found in iTunes API response");
             }
 
         } catch (Exception e) {
-            System.out.println("iTunes API failed with exception: " + e.getMessage());
+            if (AutoStepper.STEP_DEBUG) System.out.println("iTunes API failed with exception: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -105,7 +106,7 @@ public class MusicCatalogAPI {
      * Download and save image from URL
      */
     public static void saveImage(String imageUrl, String destinationFile) throws IOException {
-        URL url = new URL(imageUrl);
+        URL url = URI.create(imageUrl).toURL();
         try (InputStream is = url.openStream();
              OutputStream os = new FileOutputStream(destinationFile)) {
 

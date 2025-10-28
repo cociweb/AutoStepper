@@ -47,13 +47,13 @@ public class ID3TagReader {
                     metadata.genre = genre.trim();
                 }
 
-                System.out.println("Read ID3 tags - Title: '" + metadata.title + "', Artist: '" + metadata.artist + "', Genre: '" + metadata.genre + "'");
+                if (AutoStepper.STEP_DEBUG) System.out.println("Read ID3 tags - Title: '" + metadata.title + "', Artist: '" + metadata.artist + "', Genre: '" + metadata.genre + "'");
             } else {
-                System.out.println("No ID3 tags found in file");
+                if (AutoStepper.STEP_DEBUG) System.out.println("No ID3 tags found in file");
             }
 
         } catch (Exception e) {
-            System.out.println("Error reading ID3 tags: " + e.getMessage());
+            if (AutoStepper.STEP_DEBUG) System.out.println("Error reading ID3 tags: " + e.getMessage());
         }
 
         return metadata;

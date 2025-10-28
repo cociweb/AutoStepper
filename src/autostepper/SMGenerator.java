@@ -14,10 +14,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-// Add import for MusicCatalogAPI
-import autostepper.MusicCatalogAPI;
-// Add import for ID3 tag reading
-import autostepper.ID3TagReader;
 
 
 public class SMGenerator {
@@ -46,24 +42,19 @@ public class SMGenerator {
             "#ATTACKS:;";
     
     public static String Challenge =
-            "Challenge:\n" +
-            "     10:";
+            "Challenge:\n" + (AutoStepper.HARDMODE ? "     10:" : "     9:");
 
     public static String Hard =
-            "Hard:\n" +
-            "     8:";
+            "Hard:\n" + (AutoStepper.HARDMODE ? "     8:" : "     7:");
 
     public static String Medium =
-            "Medium:\n" +
-            "     6:";
+            "Medium:\n" + (AutoStepper.HARDMODE ? "     6:" : "     5:");
 
     public static String Easy =
-            "Easy:\n" +
-            "     4:";
+            "Easy:\n" + (AutoStepper.HARDMODE ? "     4:" : "     3:");
 
     public static String Beginner =
-            "Beginner:\n" +
-            "     2:";
+            "Beginner:\n" + (AutoStepper.HARDMODE ? "     2:" : "     1:");
     
     private static String NoteFramework =
             "//---------------dance-single - ----------------\n" +
@@ -151,7 +142,7 @@ public class SMGenerator {
 
         genre = metadata.genre.isEmpty() ? "" : metadata.genre;
 
-        System.out.println("Using metadata - Title: '" + title + "', Artist: '" + artist + "', Genre: '" + genre + "'");
+        if (AutoStepper.STEP_DEBUG) System.out.println("Using metadata - Title: '" + title + "', Artist: '" + artist + "', Genre: '" + genre + "'");
 
         String shortName = title.length() > 30 ? title.substring(0, 30) : title;
         File dir = new File(outputdir, filename + "_dir/");
@@ -161,7 +152,7 @@ public class SMGenerator {
         File imgFile = new File(dir, filename + "_img.png");
         String imgFileName = "";
         if( imgFile.exists() == false && AutoStepper.DOWNLOADIMAGES ) {
-            System.out.println("Attempting to get image for background & banner...");
+            if (AutoStepper.STEP_DEBUG) System.out.println("Attempting to get image for background & banner...");
             
             // Create better search terms using ID3 metadata when available
             String searchTerm = "";
@@ -175,27 +166,27 @@ public class SMGenerator {
                 searchTerm = songname;  // Fallback: cleaned filename
             }
             
-            System.out.println("Searching for album art with: '" + searchTerm + "'");
+            if (AutoStepper.STEP_DEBUG) System.out.println("Searching for album art with: '" + searchTerm + "'");
             
             try {
                 // Try iTunes API first (better results)
                 MusicCatalogAPI.findAlbumArt(searchTerm, imgFile.getAbsolutePath());
             } catch (Exception e) {
-                System.out.println("iTunes API failed: " + e.getMessage());
+                if (AutoStepper.STEP_DEBUG) System.out.println("iTunes API failed: " + e.getMessage());
                 try {
                     // Fallback to Google Images
                     GoogleImageSearch.FindAndSaveImage(searchTerm, imgFile.getAbsolutePath());
                 } catch (Exception e2) {
-                    System.out.println("All image search methods failed: " + e2.getMessage());
+                    if (AutoStepper.STEP_DEBUG) System.out.println("All image search methods failed: " + e2.getMessage());
                 }
             }
         } else if (!AutoStepper.DOWNLOADIMAGES) {
-            System.out.println("Image downloading disabled (use downloadimages=false to disable)");
+            if (AutoStepper.STEP_DEBUG) System.out.println("Image downloading disabled (use downloadimages=false to disable)");
         }
         if( imgFile.exists() ) {
-            System.out.println("Got an image file!");
+            if (AutoStepper.STEP_DEBUG) System.out.println("Got an image file!");
             imgFileName = imgFile.getName();
-        } else System.out.println("No image file to use :(");
+        } else if (AutoStepper.STEP_DEBUG) System.out.println("No image file to use :(");
         try {
             smfile.delete();
             copyFileUsingStream(songfile, new File(dir, filename));

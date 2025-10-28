@@ -8,6 +8,7 @@ import java.util.Random;
 public class StepGenerator {
     
     static private int MAX_HOLD_BEAT_COUNT = 4;
+    // https://github.com/stepmania/stepmania/wiki/Note-Types
     static private char EMPTY = '0', STEP = '1', HOLD = '2', STOP = '3', MINE = 'M';
     
     static Random rand = new Random();
@@ -83,7 +84,7 @@ public class StepGenerator {
         return getNoteLineIndex(AllNoteLines.size()-1);
     }
     
-    private static void makeNoteLine(String lastLine, float time, int steps, int holds, boolean mines) {
+    private static void makeNoteLine(String lastLine, float time, int steps, int holds, boolean mines, int holdDensity) {
         if( steps == 0 ) {
             char[] ret = getHoldStops(getHoldCount(), time, holds);
             AllNoteLines.add(ret);
@@ -95,7 +96,7 @@ public class StepGenerator {
             steps = 2;
             lastJumpTime = time;
         }
-        // can't hold or step more than 2
+        // can't hold or step more than 4
         int currentHoldCount = getHoldCount(); 
         if( holds + currentHoldCount > 2 ) holds = 2 - currentHoldCount;
         if( steps + currentHoldCount > 2 ) steps = 2 - currentHoldCount;
@@ -142,7 +143,7 @@ public class StepGenerator {
                 if( noteLine[stepindex] != EMPTY || holding[stepindex] > 0f ) continue;
                 if( holdcount > 0 ) {
                     noteLine[stepindex] = HOLD;
-                    willhold[stepindex] = MAX_HOLD_BEAT_COUNT;
+                    willhold[stepindex] = (float)Math.min(MAX_HOLD_BEAT_COUNT, Math.floor(MAX_HOLD_BEAT_COUNT / holdDensity));
                     holdcount--; stepcount--;
                 } else {
                     noteLine[stepindex] = STEP;
@@ -210,7 +211,7 @@ public class StepGenerator {
         return true;
     }
     
-    public static String GenerateNotes(int stepGranularity, int skipChance,
+    public static String GenerateNotes(int stepGranularity, int skipChance, int holdDensity,
                                        TFloatArrayList[] manyTimes,
                                        TFloatArrayList[] fewTimes,
                                        TFloatArrayList FFTAverages, TFloatArrayList FFTMaxes, float timePerFFT,
@@ -226,15 +227,12 @@ public class StepGenerator {
         holding[3] = 0f;
         lastKickTime = 0f;
         commaSeperatorReset = 4 * stepGranularity;
-        float lastSkippedTime = -10f;
-        int totalStepsMade = 0, timeIndex = 0;
-        boolean skippedLast = false;
+        int timeIndex = 0;
         float timeGranularity = timePerBeat / stepGranularity;
         for(float t = timeOffset; t <= totalTime; t += timeGranularity) {
             int steps = 0, holds = 0;
             String lastLine = getLastNoteLine();
             if( t > 0f ) {
-                float fftavg = getFFT(t, FFTAverages, timePerFFT);
                 float fftmax = getFFT(t, FFTMaxes, timePerFFT);
                 boolean sustained = sustainedFFT(t, 0.75f, timeGranularity, timePerFFT, FFTMaxes, FFTAverages, 0.25f, 0.45f);
                 boolean nearKick = isNearATime(t, fewTimes[AutoStepper.KICKS], timePerBeat / stepGranularity);
@@ -242,7 +240,7 @@ public class StepGenerator {
                 boolean nearEnergy = isNearATime(t, fewTimes[AutoStepper.ENERGY], timePerBeat / stepGranularity);
                 steps = sustained || nearKick || nearSnare || nearEnergy ? 1 : 0;
                 if( sustained ) {
-                    holds = 1 + (nearEnergy ? 1 : 0);
+                    holds = holdDensity * 2 + (nearEnergy ? holdDensity : 0);
                 } else if( fftmax < 0.5f ) {
                     holds = fftmax < 0.25f ? -2 : -1;
                 }
@@ -261,10 +259,9 @@ public class StepGenerator {
                     if( holds > 0 ) holds = 0;
                 }                
             }
-            if( AutoStepper.DEBUG_STEPS ) {
-                makeNoteLine(lastLine, t, timeIndex % 2 == 0 ? 1 : 0, -2, allowMines);
-            } else makeNoteLine(lastLine, t, steps, holds, allowMines);
-            totalStepsMade += steps;
+            if( AutoStepper.STEP_DEBUG ) {
+                makeNoteLine(lastLine, t, timeIndex % 2 == 0 ? 1 : 0, -2, allowMines, holdDensity);
+            } else makeNoteLine(lastLine, t, steps, holds, allowMines, holdDensity);
             timeIndex++;
         }
         // ok, put together AllNotes
@@ -284,10 +281,19 @@ public class StepGenerator {
             commaSeperator--;
             if( commaSeperator > 0 ) AllNotes += "\n";
         }
-        int _stepCount = AllNotes.length() - AllNotes.replace("1", "").length();
+        String[] lines = AllNotes.split("\n");
+        int taps = 0, jumps = 0, hands = 0, quads = 0;
+        for (String line : lines) {
+            int ones = line.length() - line.replace("1", "").length();
+            int twos = line.length() - line.replace("2", "").length();
+            if ((ones == 1 || twos == 1) && (ones + twos == 1)) taps++;
+            else if ((ones == 2 || twos == 2) && (ones + twos == 2)) jumps++;
+            else if (ones == 3) hands++;
+            else if (ones >= 4) quads++;
+        }
         int _holdCount = AllNotes.length() - AllNotes.replace("2", "").length();
         int _mineCount = AllNotes.length() - AllNotes.replace("M", "").length();
-        System.out.println("Taps: " + _stepCount + ", Holds: " + _holdCount + ", Mines: " + _mineCount);
+        System.out.println("Taps: " + taps + ", Jumps: " + jumps + ", Hands: " + hands + ", Quads: " + quads + ", Holds: " + _holdCount + ", Mines: " + _mineCount);
         return AllNotes;
     }
     

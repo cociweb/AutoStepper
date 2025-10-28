@@ -16,7 +16,7 @@ import javax.sound.sampled.AudioSystem;
 
 public class AutoStepper {
     
-    public static boolean DEBUG_STEPS = false;
+    public static boolean STEP_DEBUG = false;
     public static float MAX_BPM = 170f, MIN_BPM = 70f, BPM_SENSITIVITY = 0.05f, STARTSYNC = 0.0f;
     public static double TAPSYNC = -0.11;
     public static boolean USETAPPER = false, HARDMODE = false, UPDATESM = false, DOWNLOADIMAGES = true;
@@ -67,8 +67,6 @@ public class AutoStepper {
     }
     
     public static void main(String[] args) {
-        minim = new Minim(myAS);
-        minim.debugOff(); // Removed to disable debug messages
         String outputDir, input;
         float duration;
         System.out.println("Starting AutoStepper by cociweb (See www.github.com/cociweb/AudioStepper for more goodies!)");
@@ -89,7 +87,12 @@ public class AutoStepper {
         HARDMODE = getArg(args, "hard", "false").equals("true");
         UPDATESM = getArg(args, "updatesm", "false").equals("true");
         DOWNLOADIMAGES = getArg(args, "downloadimages", "true").equals("true");
+        STEP_DEBUG = getArg(args, "debug", "false").equals("true");
         CLEARANCE = Float.parseFloat(getArg(args, "clearance", "0.0"));
+        
+        minim = new Minim(myAS);
+        if (STEP_DEBUG) minim.debugOn();
+        else minim.debugOff(); // Removed to disable debug messages
         File inputFile = new File(input);
         if( inputFile.isFile() ) {
             myAS.analyzeUsingAudioRecordingStream(inputFile, duration, outputDir);            
@@ -102,11 +105,11 @@ public class AutoStepper {
                     (extCheck.endsWith(".mp3") || extCheck.endsWith(".wav")) ) {
                     myAS.analyzeUsingAudioRecordingStream(f, duration, outputDir);                    
                 } else {
-                    System.out.println("Skipping unsupported file: " + f.getName());
+                    if (STEP_DEBUG) System.out.println("Skipping unsupported file: " + f.getName());
                 }
             }
         } else {
-            System.out.println("Couldn't find any input files.");
+            if (STEP_DEBUG) System.out.println("Couldn't find any input files.");
         }
     }
 
@@ -232,14 +235,14 @@ public class AutoStepper {
     public int getTappedBPM(String filename) {
         // Disable tapping for MP3 files to avoid loading large decoded audio into memory
         if (filename.toLowerCase().endsWith(".mp3")) {
-            System.out.println("Tapping disabled for MP3 files. Using auto BPM detection instead.");
+            if (STEP_DEBUG) System.out.println("Tapping disabled for MP3 files. Using auto BPM detection instead.");
             return 0;
         }
         // now we load the whole song so we don't have to worry about streaming a variable mp3 with timing inaccuracies
-        System.out.println("Loading whole song for tapping...");
+        if (STEP_DEBUG) System.out.println("Loading whole song for tapping...");
         AudioSample fullSong = minim.loadSample(filename);
         if (fullSong == null) {
-            System.out.println("Failed to load song for tapping. Using auto BPM detection instead.");
+            if (STEP_DEBUG) System.out.println("Failed to load song for tapping. Using auto BPM detection instead.");
             return 0; // Will fall back to auto detection
         }
         System.out.println("\n********************************************************************\n\nPress [ENTER] to start song, then press [ENTER] to tap to the beat.\nIt will complete after 30 entries.\nDon't worry about hitting the first beat, just start anytime.\n\n********************************************************************");
@@ -261,11 +264,12 @@ public class AutoStepper {
                 // we note a consistent 0.11 second delay in input to song here
                 double time = (double)((now - nano) / 1000000000.0) + TAPSYNC;
                 positions.add((float)time);                
-                System.out.println("#" + positions.size() + "/30: " + time + "s");
+                if (STEP_DEBUG) System.out.println("#" + positions.size() + "/30: " + time + "s");
             }
         } catch(Exception e) { }
         fullSong.stop();
         fullSong.close();
+        in.close();
         float avg = ((positions.getQuick(positions.size()-1) - positions.getQuick(0)) / (positions.size() - 1));
         int BPM = (int)Math.floor(60f / avg);
         float timePerBeat = 60f / BPM;
@@ -309,26 +313,26 @@ public class AutoStepper {
 
       try {
         if (fullSongMode) {
-            System.out.println("AudioFileFormat: " + filename);
+            if (STEP_DEBUG) System.out.println("AudioFileFormat: " + filename);
             AudioFileFormat aff = AudioSystem.getAudioFileFormat(filename);
             long frameLength = aff.getFrameLength();
             float frameRate = aff.getFormat().getFrameRate();
             
             if (frameLength > 0 && frameRate > 0) {
                 songTime = frameLength / frameRate;  // Length in seconds
-                System.out.println("Audio length from AudioFileFormat: " + songTime + " seconds");
+                if (STEP_DEBUG) System.out.println("Audio length from AudioFileFormat: " + songTime + " seconds");
             } else {
                 // Check properties for duration (some MP3 SPIs populate this)
                 Map<String, Object> props = aff.properties();
                 if (props.containsKey("duration")) {
                     long durationMicros = ((Long) props.get("duration")).longValue();
                     songTime = durationMicros / 1_000_000f;  // Convert microseconds to seconds
-                    System.out.println("Audio length from properties: " + songTime + " seconds");
+                    if (STEP_DEBUG) System.out.println("Audio length from properties: " + songTime + " seconds");
                 }
             }
             if (songTime <= 0f) {
             songTime = 600f;  // Fallback to 10 minutes
-            System.out.println("Audio length unknown, estimating up to " + songTime + " seconds");
+            if (STEP_DEBUG) System.out.println("Audio length unknown, estimating up to " + songTime + " seconds");
             }
             totalSamples = (int)( songTime * stream.getFormat().getSampleRate() );
         } else {
@@ -352,9 +356,9 @@ public class AutoStepper {
         totalChunks = Math.min(totalChunks, (int)(seconds * stream.getFormat().getSampleRate() / fftSize) + 1);
       }
 
-      System.out.println("Processing " + totalChunks + " chunks for " + songTime + " seconds" + (fullSongMode ? " (full song mode)" : ""));
+      if (STEP_DEBUG) System.out.println("Processing " + totalChunks + " chunks for " + songTime + " seconds" + (fullSongMode ? " (full song mode)" : ""));
 
-      System.out.println("Performing Beat Detection...");
+      if (STEP_DEBUG) System.out.println("Performing Beat Detection...");
       for(int i=0;i<fewTimes.length;i++) {
           if( fewTimes[i] == null ) fewTimes[i] = new TFloatArrayList();
           if( manyTimes[i] == null ) manyTimes[i] = new TFloatArrayList();
@@ -372,7 +376,7 @@ public class AutoStepper {
         if (framesRead <= 0) {
           consecutiveNoData++;
           if (consecutiveNoData > 10) {
-            System.out.println("No data read for 10 consecutive chunks, stopping analysis");
+            if (STEP_DEBUG) System.out.println("No data read for 10 consecutive chunks, stopping analysis");
             break;
           }
           continue;
@@ -413,10 +417,10 @@ public class AutoStepper {
       // Update songTime to actual duration processed
       if (fullSongMode && actualSongTime > 0) {
         songTime = actualSongTime;
-        System.out.println("Actual song duration processed: " + songTime + " seconds");
+        if (STEP_DEBUG) System.out.println("Actual song duration processed: " + songTime + " seconds");
       }
-      System.out.println("Loudest midrange average to normalize to 1: " + largestAvg);
-      System.out.println("Loudest midrange maximum to normalize to 1: " + largestMax);
+      if (STEP_DEBUG) System.out.println("Loudest midrange average to normalize to 1: " + largestAvg);
+      if (STEP_DEBUG) System.out.println("Loudest midrange maximum to normalize to 1: " + largestMax);
       float scaleBy = 1f / largestAvg;
       float scaleMaxBy = 1f / largestMax;
       for(int i=0;i<MidFFTAmount.size();i++) {
@@ -445,22 +449,21 @@ public class AutoStepper {
       } else if( UPDATESM ) {
           File smfile = SMGenerator.getSMFile(filename, outputDir);
           if( smfile.exists() ) {
-              try {
-                BufferedReader br = new BufferedReader(new FileReader(smfile));
+              try (BufferedReader br = new BufferedReader(new FileReader(smfile))) {
                 while(br.ready() && (BPM == 0f || startTime == 0f)) {
                     String line = br.readLine();
                     if( line.contains("#OFFSET:") ) {
                         int off = line.indexOf("#OFFSET:") + 8;
                         int end = line.indexOf(";", off);
                         startTime = Float.parseFloat(line.substring(off, end));
-                        System.out.println("StartTime from SM file: " + startTime);
+                        if (STEP_DEBUG) System.out.println("StartTime from SM file: " + startTime);
                     }
                     if( line.contains("#BPMS:") ) {
                         int off = line.indexOf("#BPMS:");
                         off = line.indexOf("=", off) + 1;
                         int end = line.indexOf(";", off);
                         BPM = Float.parseFloat(line.substring(off, end));
-                        System.out.println("BPM from SM file: " + BPM);
+                        if (STEP_DEBUG) System.out.println("BPM from SM file: " + BPM);
                     }
                 }
                 timePerBeat = 60f / BPM;
@@ -491,8 +494,8 @@ public class AutoStepper {
         startTimes.add(kickStartTime);
         startTime = -getMostCommon(startTimes, 0.02f, false);            
       }
-      System.out.println("Time per beat: " + timePerBeat + ", BPM: " + BPM);
-      System.out.println("Start Time: " + startTime);
+      if (STEP_DEBUG) System.out.println("Time per beat: " + timePerBeat + ", BPM: " + BPM);
+      if (STEP_DEBUG) System.out.println("Start Time: " + startTime);
       float effectiveTime = 0f;
       if (!fullSongMode) {
         effectiveTime = seconds;
@@ -505,8 +508,8 @@ public class AutoStepper {
         float effectiveEnd = songTime - skipTime;
         effectiveTime = effectiveEnd - effectiveStart;
         
-        System.out.println("Full song mode: skipping first " + skipTime + "s and last " + skipTime + "s (clearance parameter)");
-        System.out.println("Effective step generation range: " + effectiveStart + "s to " + effectiveEnd + "s");
+        if (STEP_DEBUG) System.out.println("Full song mode: skipping first " + skipTime + "s and last " + skipTime + "s (clearance parameter)");
+        if (STEP_DEBUG) System.out.println("Effective step generation range: " + effectiveStart + "s to " + effectiveEnd + "s");
         
         // Filter all beat time arrays to only include times within the effective range
         for(int i=0; i<fewTimes.length; i++) {
@@ -536,25 +539,25 @@ public class AutoStepper {
         // Note: FFT data is not filtered in full song mode to preserve normalization
         // Only beat times are filtered for step generation
         
-        System.out.println("Filtered beat data - effective duration: " + effectiveTime + " seconds");
+        if (STEP_DEBUG) System.out.println("Filtered beat data - effective duration: " + effectiveTime + " seconds");
       }
       
       // start making the SM
       BufferedWriter smfile = SMGenerator.GenerateSM(BPM, startTime, filename, outputDir);
       
-      if( HARDMODE ) System.out.println("Hard mode enabled! Extra steps for you! ;-)");
+      if( HARDMODE ) if (STEP_DEBUG) System.out.println("Hard mode enabled! Extra steps for you! ;-)");
       
       // Use Effective songTime for full song mode, seconds for limited mode
 
       float stepGenerationDuration = fullSongMode ? effectiveTime : seconds;
       
-      SMGenerator.AddNotes(smfile, SMGenerator.Beginner, StepGenerator.GenerateNotes(1, HARDMODE ? 2 : 1, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, stepGenerationDuration, false));
-      SMGenerator.AddNotes(smfile, SMGenerator.Easy, StepGenerator.GenerateNotes(1, HARDMODE ? 3 : 2, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, stepGenerationDuration, false));
-      SMGenerator.AddNotes(smfile, SMGenerator.Medium, StepGenerator.GenerateNotes(2, HARDMODE ? 5 : 4, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, stepGenerationDuration, false));
-      SMGenerator.AddNotes(smfile, SMGenerator.Hard, StepGenerator.GenerateNotes(2, HARDMODE ? 7 : 5, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, stepGenerationDuration, false));
-      SMGenerator.AddNotes(smfile, SMGenerator.Challenge, StepGenerator.GenerateNotes(2, HARDMODE ? 10 : 8, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, stepGenerationDuration, true));
+      SMGenerator.AddNotes(smfile, SMGenerator.Beginner, StepGenerator.GenerateNotes(1, HARDMODE ? 1 : 2, 0, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, stepGenerationDuration, false));
+      SMGenerator.AddNotes(smfile, SMGenerator.Easy, StepGenerator.GenerateNotes(1,HARDMODE ? 2 : 4, 1, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, stepGenerationDuration, false));
+      SMGenerator.AddNotes(smfile, SMGenerator.Medium, StepGenerator.GenerateNotes(2, HARDMODE ? 4 : 6, 1, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, stepGenerationDuration, false));
+      SMGenerator.AddNotes(smfile, SMGenerator.Hard, StepGenerator.GenerateNotes(2, HARDMODE ? 2 : 4, 2, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, stepGenerationDuration, false));
+      SMGenerator.AddNotes(smfile, SMGenerator.Challenge, StepGenerator.GenerateNotes(2, HARDMODE ? 1 : 2, 5, manyTimes, fewTimes, MidFFTAmount, MidFFTMaxes, timePerSample, timePerBeat, startTime, stepGenerationDuration, true));
       SMGenerator.Complete(smfile);
       
-      System.out.println("[--------- SUCCESS ----------]");
+      System.out.println("[--------- SUCCESS ----------]\n");
     }
 }
