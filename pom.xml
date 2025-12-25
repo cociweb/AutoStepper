@@ -8,8 +8,8 @@
     <packaging>jar</packaging>
     <name>AutoStepper</name>
     <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
     <repositories>
@@ -63,7 +63,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <release>21</release>
+                    <release>25</release>
                     <compilerArgs>
                         <arg>--add-opens</arg>
                         <arg>java.base/sun.misc=ALL-UNNAMED</arg>
@@ -140,6 +140,41 @@
                                 </filter>
                             </filters>
                             <shadedArtifactAttached>false</shadedArtifactAttached>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>dist-artifacts</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.basedir}/dist"/>
+                                <mkdir dir="${project.basedir}/dist/lib"/>
+
+                                <copy file="${project.basedir}/build/AutoStepper.jar" todir="${project.basedir}/dist" overwrite="true"/>
+                                <copy file="${project.basedir}/build/AutoStepper-with-deps.jar" todir="${project.basedir}/dist" overwrite="true"/>
+
+                                <delete failonerror="false" includeemptydirs="true">
+                                    <fileset dir="${project.basedir}/dist/lib" includes="**/*"/>
+                                </delete>
+                                <copy todir="${project.basedir}/dist/lib" overwrite="true">
+                                    <fileset dir="${project.basedir}/build/lib" includes="**/*"/>
+                                </copy>
+
+                                <zip destfile="${project.basedir}/dist/AutoStepper-Java-v${project.version}.zip" basedir="${project.basedir}/build">
+                                    <include name="AutoStepper.jar"/>
+                                    <include name="lib/**"/>
+                                </zip>
+                            </target>
                         </configuration>
                     </execution>
                 </executions>
