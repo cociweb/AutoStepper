@@ -66,18 +66,18 @@ You can also use the output as a base to further edit & perfect songs, with Auto
 
 I will add it is optimized for pad use, not keyboard use (e.g. difficulty isn't high enough).
 
-    cociweb
+cociweb, phr00t
 
 ** LICENSING: Modified MIT license to restrict commercial use & require attribution **
 
-Copyright (c) 2025 cociweb
+Copyright (c) 2026 cociweb, phr00t
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software with only commercial use restrictions & a requirement to
-attribute cociweb. You are free to to use, copy, modify, merge, publish,
+attribute cociweb and phr00t. You are free to to use, copy, modify, merge, publish,
 distribute this Software for private, personal & non-commercial uses as long
-as cociweb is attributed.
+as cociweb and phr00t are attributed.
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
