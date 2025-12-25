@@ -9,8 +9,14 @@ import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URL;
 import java.net.HttpURLConnection;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class MusicCatalogAPI {
+
+    private static final Logger logger = Logger.getLogger(MusicCatalogAPI.class.getName());
+
+    private MusicCatalogAPI() {}
 
     /**
      * Search for album art using iTunes Search API (free, no API key required)
@@ -25,7 +31,23 @@ public class MusicCatalogAPI {
                                       .replace("-", " ").replace("_", " ")
                                       .replace("&", " ").trim();
 
-            if (AutoStepper.STEP_DEBUG) System.out.println("iTunes search term: '" + searchTerm + "'");
+            String artworkUrl = fetchArtworkUrl(searchTerm);
+            if (artworkUrl != null) {
+                saveImage(artworkUrl, destinationFile);
+                if (AutoStepper.isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine("Downloaded album art from iTunes!");
+            } else {
+                if (AutoStepper.isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine("No album art found in iTunes API response");
+            }
+
+        } catch (Exception e) {
+            if (AutoStepper.isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine("iTunes API failed with exception: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private static String fetchArtworkUrl(String searchTerm) {
+        try {
+            if (AutoStepper.isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine(String.format("iTunes search term: '%s'", searchTerm));
 
             // Use iTunes Search API (free, no API key needed)
             String apiUrl = "https://itunes.apple.com/search?term=" +
@@ -42,8 +64,8 @@ public class MusicCatalogAPI {
 
             int responseCode = connection.getResponseCode();
             if (responseCode != 200) {
-                if (AutoStepper.STEP_DEBUG) System.out.println("iTunes API returned HTTP " + responseCode);
-                return;
+                if (AutoStepper.isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine(String.format("iTunes API returned HTTP %d", responseCode));
+                return null;
             }
 
             // Read the JSON response
@@ -63,16 +85,13 @@ public class MusicCatalogAPI {
 
             if (artworkUrl != null && !artworkUrl.isEmpty()) {
                 // Get higher resolution artwork (replace 100x100 with 600x600)
-                artworkUrl = artworkUrl.replace("100x100bb", "600x600bb");
-                saveImage(artworkUrl, destinationFile);
-                if (AutoStepper.STEP_DEBUG) System.out.println("Downloaded album art from iTunes!");
-            } else {
-                if (AutoStepper.STEP_DEBUG) System.out.println("No album art found in iTunes API response");
+                return artworkUrl.replace("100x100bb", "600x600bb");
             }
+            return null;
 
         } catch (Exception e) {
-            if (AutoStepper.STEP_DEBUG) System.out.println("iTunes API failed with exception: " + e.getMessage());
-            e.printStackTrace();
+            if (AutoStepper.isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine("iTunes API failed with exception: " + e.getMessage());
+            return null;
         }
     }
 

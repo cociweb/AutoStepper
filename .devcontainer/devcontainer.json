@@ -1,21 +1,6 @@
 {
     "name": "AutoStepper Development",
-    "build": {
-        "dockerfile": "Dockerfile",
-        "context": ".."
-    },
-    "features": {
-        "ghcr.io/devcontainers/features/common-utils:2": {
-            "installZsh": true,
-            "username": "vscode",
-            "uid": "1000",
-            "gid": "1000"
-        },
-        "ghcr.io/devcontainers/features/git:1": {
-            "version": "latest",
-            "ppa": true
-        }
-    },
+    "image": "mcr.microsoft.com/devcontainers/java:25",
     "customizations": {
         "vscode": {
             "extensions": [
@@ -28,12 +13,12 @@
             "settings": {
                 "java.configuration.runtimes": [
                     {
-                        "name": "JavaSE-21",
-                        "path": "/usr/lib/jvm/java-21-openjdk-amd64",
+                        "name": "JavaSE-25",
+                        "path": "/usr/local/sdkman/candidates/java/current",
                         "default": true
                     }
                 ],
-                "java.jdt.ls.java.home": "/usr/lib/jvm/java-21-openjdk-amd64",
+                "java.jdt.ls.java.home": "/usr/local/sdkman/candidates/java/current",
                 "java.configuration.updateBuildConfiguration": "automatic",
                 "java.import.gradle.wrapper.enabled": false,
                 "java.import.maven.enabled": true,
@@ -52,13 +37,5 @@
         }
     },
     "postCreateCommand": "mvn clean install -DskipTests",
-    "remoteEnv": {
-        "JAVA_HOME": "/usr/lib/jvm/java-21-openjdk-amd64",
-        "PATH": "${containerEnv:PATH}:/usr/lib/jvm/java-21-openjdk-amd64/bin"
-    },
-    "forwardPorts": [],
-    "portsAttributes": {},
-    "postStartCommand": "echo 'Container ready!', mvn clean install -DskipTests",
-    "remoteUser": "vscode",
-    "updateRemoteUserUID": true
+    "remoteUser": "vscode"
 }

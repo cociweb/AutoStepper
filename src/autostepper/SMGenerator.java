@@ -13,12 +13,16 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.logging.Logger;
 
 
 
 public class SMGenerator {
  
-    private static String Header = 
+    private static final Logger logger = Logger.getLogger(SMGenerator.class.getName());
+
+    private SMGenerator() {}
+    private static final String HEADER = 
             "#TITLE:$TITLE;\n" +
             "#SUBTITLE:;\n" +
             "#ARTIST:$ARTIST;\n" +
@@ -41,22 +45,17 @@ public class SMGenerator {
             "#KEYSOUNDS:;\n" +
             "#ATTACKS:;";
     
-    public static String Challenge =
-            "Challenge:\n" + (AutoStepper.HARDMODE ? "     10:" : "     9:");
+    public static String getChallenge() { return "Challenge:\n" + (AutoStepper.isHardMode() ? "     10:" : "     9:"); }
 
-    public static String Hard =
-            "Hard:\n" + (AutoStepper.HARDMODE ? "     8:" : "     7:");
+    public static String getHard() { return "Hard:\n" + (AutoStepper.isHardMode() ? "     8:" : "     7:"); }
 
-    public static String Medium =
-            "Medium:\n" + (AutoStepper.HARDMODE ? "     6:" : "     5:");
+    public static String getMedium() { return "Medium:\n" + (AutoStepper.isHardMode() ? "     6:" : "     5:"); }
 
-    public static String Easy =
-            "Easy:\n" + (AutoStepper.HARDMODE ? "     4:" : "     3:");
+    public static String getEasy() { return "Easy:\n" + (AutoStepper.isHardMode() ? "     4:" : "     3:"); }
 
-    public static String Beginner =
-            "Beginner:\n" + (AutoStepper.HARDMODE ? "     2:" : "     1:");
+    public static String getBeginner() { return "Beginner:\n" + (AutoStepper.isHardMode() ? "     2:" : "     1:"); }
     
-    private static String NoteFramework =
+    private static final String NOTE_FRAMEWORK =
             "//---------------dance-single - ----------------\n" +
             "#NOTES:\n" +
             "     dance-single:\n" +
@@ -66,33 +65,35 @@ public class SMGenerator {
             "$NOTES\n" +
             ";\n\n";
 
+    public static String getHeader() { return HEADER; }
+    
+    public static String getNoteFramework() { return NOTE_FRAMEWORK; }
+
     private static void copyFileUsingStream(File source, File dest) throws IOException {
-        InputStream is = null;
-        OutputStream os = null;
-        try {
-            is = new FileInputStream(source);
-            os = new FileOutputStream(dest);
+        try (InputStream is = new FileInputStream(source);
+             OutputStream os = new FileOutputStream(dest)) {
             byte[] buffer = new byte[1024];
             int length;
             while ((length = is.read(buffer)) > 0) {
                 os.write(buffer, 0, length);
             }
-        } finally {
-            is.close();
-            os.close();
         }
     }    
     
-    public static void AddNotes(BufferedWriter smfile, String difficulty, String notes) {
+    public static void addNotes(BufferedWriter smfile, String difficulty, String notes) {
         try {
-            smfile.write(NoteFramework.replace("$DIFFICULTY", difficulty).replace("$NOTES", notes));
-        } catch(Exception e) { }
+            smfile.write(getNoteFramework().replace("$DIFFICULTY", difficulty).replace("$NOTES", notes));
+        } catch(Exception e) { 
+            // Ignore exceptions during note writing
+        }
     }
     
-    public static void Complete(BufferedWriter smfile) {
+    public static void complete(BufferedWriter smfile) {
         try {
             smfile.close();
-        } catch(Exception e) { }
+        } catch(Exception e) { 
+            // Ignore exceptions during file closing
+        }
     }
 
     public static File getSMFile(File songFile, String outputdir) {
@@ -101,7 +102,7 @@ public class SMGenerator {
         return new File(dir, filename + ".sm");
     }
     
-    public static BufferedWriter GenerateSM(float BPM, float startTime, File songfile, String outputdir) {
+    public static BufferedWriter generateSm(float bpm, float startTime, File songfile, String outputdir) {
         String filename = songfile.getName();
         String songname = filename.replace(".mp3", " ").replace(".wav", " ").replace(".com", " ").replace(".org", " ").replace(".info", " ");
 
@@ -109,14 +110,16 @@ public class SMGenerator {
         ID3TagReader.AudioMetadata metadata = ID3TagReader.readMetadata(songfile);
 
         // Use ID3 data primarily, fallback to filename parsing
-        String title, artist, genre;
+        String title;
+        String artist;
+        String genre;
 
-        if (!metadata.title.isEmpty()) {
-            title = metadata.title;
+        if (!metadata.getTitle().isEmpty()) {
+            title = metadata.getTitle();
         } else {
             // Clean up song name for title - remove YouTube URLs and other noise
             songname = songname.replaceAll("\\([^)]*\\)", "") // Remove all parentheses and content
-                               .replaceAll("\\[.*?\\]", "") // Remove brackets and content
+                               .replaceAll("\\[[^\\]]*+\\]", "") // Remove brackets and content
                                .replaceAll("\\b\\d{4}K\\b", "") // Remove resolution like 4K
                                .replaceAll("\\bOfficial\\b", "") // Remove "Official"
                                .replaceAll("\\bVideo\\b", "") // Remove "Video"
@@ -128,8 +131,8 @@ public class SMGenerator {
             title = songname.length() > 30 ? songname.substring(0, 30) : songname;
         }
 
-        if (!metadata.artist.isEmpty()) {
-            artist = metadata.artist;
+        if (!metadata.getArtist().isEmpty()) {
+            artist = metadata.getArtist();
         } else {
             // Try to extract artist from filename (format: "Artist - Title")
             String[] parts = songname.split("\\s*-\\s*", 2);
@@ -140,9 +143,9 @@ public class SMGenerator {
             }
         }
 
-        genre = metadata.genre.isEmpty() ? "" : metadata.genre;
+        genre = metadata.getGenre().isEmpty() ? "" : metadata.getGenre();
 
-        if (AutoStepper.STEP_DEBUG) System.out.println("Using metadata - Title: '" + title + "', Artist: '" + artist + "', Genre: '" + genre + "'");
+        if (AutoStepper.isStepDebug() && logger.isLoggable(java.util.logging.Level.FINE)) logger.fine(String.format("Using metadata - Title: '%s', Artist: '%s', Genre: '%s'", title, artist, genre));
 
         String shortName = title.length() > 30 ? title.substring(0, 30) : title;
         File dir = new File(outputdir, filename + "_dir/");
@@ -151,8 +154,8 @@ public class SMGenerator {
         // get image for sm
         File imgFile = new File(dir, filename + "_img.png");
         String imgFileName = "";
-        if( imgFile.exists() == false && AutoStepper.DOWNLOADIMAGES ) {
-            if (AutoStepper.STEP_DEBUG) System.out.println("Attempting to get image for background & banner...");
+        if (!imgFile.exists() && AutoStepper.DOWNLOADIMAGES) {
+            if (AutoStepper.isStepDebug()) logger.fine("Attempting to get image for background & banner...");
             
             // Create better search terms using ID3 metadata when available
             String searchTerm = "";
@@ -166,29 +169,34 @@ public class SMGenerator {
                 searchTerm = songname;  // Fallback: cleaned filename
             }
             
-            if (AutoStepper.STEP_DEBUG) System.out.println("Searching for album art with: '" + searchTerm + "'");
+            if (AutoStepper.isStepDebug() && logger.isLoggable(java.util.logging.Level.FINE)) logger.fine(String.format("Searching for album art with: '%s'", searchTerm));
             
             try {
                 // Try iTunes API first (better results)
                 MusicCatalogAPI.findAlbumArt(searchTerm, imgFile.getAbsolutePath());
             } catch (Exception e) {
-                if (AutoStepper.STEP_DEBUG) System.out.println("iTunes API failed: " + e.getMessage());
+                // Ignore exceptions during file writing
+            }        // Ignore exceptions during file operations
+                if (AutoStepper.isStepDebug()) logger.fine("iTunes API failed: " + e.getMessage());
                 try {
                     // Fallback to Google Images
-                    GoogleImageSearch.FindAndSaveImage(searchTerm, imgFile.getAbsolutePath());
+                    GoogleImageSearch.findAndSaveImage(searchTerm, imgFile.getAbsolutePath());
                 } catch (Exception e2) {
-                    if (AutoStepper.STEP_DEBUG) System.out.println("All image search methods failed: " + e2.getMessage());
+                    if (AutoStepper.isStepDebug()) logger.fine("All image search methods failed: " + e2.getMessage());
                 }
             }
-        } else if (!AutoStepper.DOWNLOADIMAGES) {
-            if (AutoStepper.STEP_DEBUG) System.out.println("Image downloading disabled (use downloadimages=false to disable)");
+        } else if (!AutoStepper.DOWNLOADIMAGES && AutoStepper.isStepDebug()) {
+            logger.fine("Image downloading disabled (use downloadimages=false to disable)");
         }
         if( imgFile.exists() ) {
-            if (AutoStepper.STEP_DEBUG) System.out.println("Got an image file!");
+            if (AutoStepper.isStepDebug()) logger.fine("Got an image file!");
             imgFileName = imgFile.getName();
-        } else if (AutoStepper.STEP_DEBUG) System.out.println("No image file to use :(");
+        } else if (AutoStepper.isStepDebug()) logger.fine("No image file to use :(");
         try {
-            smfile.delete();
+            boolean deleted = smfile.delete();
+            if (AutoStepper.isStepDebug() && !deleted) {
+                logger.fine("Failed to delete existing SM file");
+            }
             copyFileUsingStream(songfile, new File(dir, filename));
             BufferedWriter writer = new BufferedWriter(new FileWriter(smfile));
             writer.write(Header.replace("$TITLE", shortName)
@@ -199,7 +207,9 @@ public class SMGenerator {
                              .replace("$STARTTIME", Float.toString(startTime + AutoStepper.STARTSYNC))
                              .replace("$BPM", Float.toString(BPM)));
             return writer;
-        } catch(Exception e) {}
+        } catch(Exception e) {
+            // Ignore exceptions during file writing
+        }
         return null;
     }
 }
