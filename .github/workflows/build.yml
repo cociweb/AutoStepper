@@ -36,7 +36,7 @@ jobs:
     - name: Upload build artifacts
       uses: actions/upload-artifact@v6
       with:
-        name: AutoStepper-jar.zip
+        name: AutoStepper-jar
         path: |
           build/AutoStepper.jar
           build/lib/
@@ -45,7 +45,7 @@ jobs:
     - name: Upload build artifacts
       uses: actions/upload-artifact@v6
       with:
-        name: AutoStepper-with-deps.zip
+        name: AutoStepper-with-deps
         path: |
           build/AutoStepper-with-deps.jar
         retention-days: 30
