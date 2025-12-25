@@ -1,0 +1,49 @@
+{
+    "name": "AutoStepper Development",
+    "image": "mcr.microsoft.com/devcontainers/java:25",
+    "features": {
+        "ghcr.io/devcontainers/features/java:1": {
+            "version": "25",
+            "installMaven": "true",
+            "mavenVersion": "3.9"
+        }
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "vscjava.vscode-java-pack",
+                "vscjava.vscode-maven",
+                "vscjava.vscode-checkstyle",
+                "sonarsource.sonarlint-vscode",
+                "redhat.java"
+            ],
+            "settings": {
+                "java.configuration.runtimes": [
+                    {
+                        "name": "JavaSE-25",
+                        "path": "/usr/lib/jvm/msopenjdk-current",
+                        "default": true
+                    }
+                ],
+                "java.jdt.ls.java.home": "/usr/lib/jvm/msopenjdk-current",
+                "java.configuration.updateBuildConfiguration": "automatic",
+                "java.import.gradle.wrapper.enabled": false,
+                "java.import.maven.enabled": true,
+                "java.autobuild.enabled": true,
+                "java.completion.importOrder": [
+                    "java",
+                    "javax",
+                    "com",
+                    "org"
+                ],
+                "java.checkstyle.configuration": "${workspaceFolder}/google_checks.xml",
+                "java.checkstyle.version": "10.12.1",
+                "editor.formatOnSave": true,
+                "editor.defaultFormatter": "redhat.java"
+            }
+        }
+    },
+    "postCreateCommand": "echo 'Dev container setup complete' && mvn --version && mvn clean install -DskipTests",
+    "remoteUser": "vscode"
+
+}

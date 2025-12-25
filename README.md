@@ -8,17 +8,53 @@ AutoStepper is a Java console program designed to automatically create StepMania
     Multiple beat detection methods
     Cross-platform support
 
-So, here it is -- AutoStepper by Phr00t's Software (www.phr00t.com). You can get the whole built program under the "dist" folder.
+So, here it is -- AutoStepper by cociweb (www.github.com/cociweb/AutoStepper). You can build AutoStepper.jar from source using either Maven or javac. The output JAR and compiled classes will be placed in the `build/` directory.
 
-It works on a common line with arguments, which are all optional. If you just run the Java program, it will scan & process all mp3s (and wavs) in the current directory, and spit out folders for each song in the same directory (90 seconds worth of steps).
+## Building with Maven (Recommended)
+
+Ensure you have Java 25 (OpenJDK 25) and Maven installed.
+
+```sh
+mvn clean package
+```
+
+The output JAR will be at:
+
+    build/AutoStepper.jar
+
+## Building with javac (Manual)
+
+Ensure you have Java 25 (OpenJDK 25) installed. Run:
+
+```sh
+javac -d build -cp "lib/*" $(find src -name '*.java')
+```
+
+This compiles all sources into the `build/` directory. To create a runnable JAR (optional):
+
+```sh
+jar cfe build/AutoStepper.jar autostepper.AutoStepper -C build . -C lib .
+```
+
+## Running AutoStepper
+
+To run the program after building:
+
+```sh
+java -jar build/AutoStepper.jar [arguments]
+```
+
+Replace `[arguments]` with your desired command-line options (see below).
+
+---
 
 The arguments are:
 
-    input=[file/dir] output=[songs dir] duration=[seconds to process] tap=[true/false] tapsync=[offset time in seconds for tap, default: -0.11] hard=[true/false] updatesm=[true/false]
+    input=[file/dir] output=[songs dir] duration=[seconds to process] tap=[true/false] tapsync=[offset time in seconds for tap, default: -0.11] clearence=[seconds to keep clear] hard=[true/false] updatesm=[true/false]
     
 Example:
 
-    java -jar AutoStepper.jar input="./songs/" duration=130 hard=true
+    java -jar ./dist/AutoStepper.jar input="./songs/" output="./SM/" duration=-1 hard=false clearence=10 tap=false
 
 If you set tap=true, AutoStepper won't try and automatically calculate the BPM or offset, and will instead prompt you to hit ENTER along with 30 consecutive beats. AutoStepper will then do the rest.
 
@@ -30,18 +66,18 @@ You can also use the output as a base to further edit & perfect songs, with Auto
 
 I will add it is optimized for pad use, not keyboard use (e.g. difficulty isn't high enough).
 
-    Phr00t
+    cociweb
 
 ** LICENSING: Modified MIT license to restrict commercial use & require attribution **
 
-Copyright (c) 2018 Phr00t's Software
+Copyright (c) 2025 cociweb
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software with only commercial use restrictions & a requirement to
-attribute Phr00t's Software. You are free to to use, copy, modify, merge, publish,
+attribute cociweb. You are free to to use, copy, modify, merge, publish,
 distribute this Software for private, personal & non-commercial uses as long
-as Phr00t's Software is attributed.
+as cociweb is attributed.
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
