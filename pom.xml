@@ -63,6 +63,9 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
+                    <jdkToolchain>
+                        <version>25</version>
+                    </jdkToolchain>
                     <release>25</release>
                     <compilerArgs>
                         <arg>--add-opens</arg>
