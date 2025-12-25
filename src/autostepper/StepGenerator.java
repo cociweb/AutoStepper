@@ -12,6 +12,7 @@ public class StepGenerator {
     // https://github.com/stepmania/stepmania/wiki/Note-Types
     private char empty = '0';
     private char stop = '3';
+    private char mine = 'M';
     
     private Random rand = new Random();
     
@@ -21,6 +22,8 @@ public class StepGenerator {
     private float lastJumpTime;
     private ArrayList<char[]> allNoteLines = new ArrayList<>();
     private int mineCount;
+    private int commaSeperator;
+    private int commaSeperatorReset;
     
     private int getHoldCount() {
         int ret = 0;
@@ -118,11 +121,11 @@ public class StepGenerator {
             lastJumpTime = time;
         }
         
-        holds = adjustHoldsAndSteps(holds, steps);
+        holds = adjustHoldsAndSteps(placeStep, holds, steps);
         char[] noteLine = getHoldStops(getHoldCount(), holds);
         
         if( mines ) {
-            noteLine = addMines(noteLine);
+            addMines(noteLine);
         }
         
         String completeLine = String.valueOf(noteLine);
@@ -156,7 +159,7 @@ public class StepGenerator {
         return steps;
     }
     
-    private int adjustHoldsAndSteps(int holds, int steps) {
+    private int adjustHoldsAndSteps(boolean[] placeStep, int holds, int steps) {
         int currentHoldCount = getHoldCount(); 
         if( holds + currentHoldCount > 2 ) holds = 2 - currentHoldCount;
         if( steps + currentHoldCount > 2 ) {
@@ -176,10 +179,10 @@ public class StepGenerator {
         mineCount--;
         if( mineCount <= 0 ) {
             mineCount = rand.nextInt(8);
-            if( rand.nextInt(8) == 0 && noteLine[0] == EMPTY && holding[0] <= 0f ) noteLine[0] = MINE;
-            if( rand.nextInt(8) == 0 && noteLine[1] == EMPTY && holding[1] <= 0f ) noteLine[1] = MINE;
-            if( rand.nextInt(8) == 0 && noteLine[2] == EMPTY && holding[2] <= 0f ) noteLine[2] = MINE;
-            if( rand.nextInt(8) == 0 && noteLine[3] == EMPTY && holding[3] <= 0f ) noteLine[3] = MINE;
+            if( rand.nextInt(8) == 0 && noteLine[0] == empty && holding[0] <= 0f ) noteLine[0] = mine;
+            if( rand.nextInt(8) == 0 && noteLine[1] == empty && holding[1] <= 0f ) noteLine[1] = mine;
+            if( rand.nextInt(8) == 0 && noteLine[2] == empty && holding[2] <= 0f ) noteLine[2] = mine;
+            if( rand.nextInt(8) == 0 && noteLine[3] == empty && holding[3] <= 0f ) noteLine[3] = mine;
         }
         return noteLine;
     }
@@ -214,6 +217,14 @@ public class StepGenerator {
             if( checktime > time + threshold ) return false;
         }
         return false;
+    }
+    
+    private float getFft(float time, TFloatArrayList fftMaxes, float timePerFft) {
+        int index = (int)Math.floor(time / timePerFft);
+        if( index >= 0 && index < fftMaxes.size() ) {
+            return fftMaxes.get(index);
+        }
+        return 0f;
     }
     
     private static class SustainedFftConfig {
@@ -273,6 +284,7 @@ public class StepGenerator {
         public final int stepGranularity;
         public final int skipChance;
         public final int holdDensity;
+        public final TFloatArrayList[] manyTimes;
         public final TFloatArrayList[] fewTimes;
         public final TFloatArrayList fftAverages;
         public final TFloatArrayList fftMaxes;
@@ -284,13 +296,14 @@ public class StepGenerator {
         
         @SuppressWarnings("all")
         public NoteGenerationConfig(int stepGranularity, int skipChance, int holdDensity,
-                                  TFloatArrayList[] fewTimes, TFloatArrayList fftAverages, 
-                                  TFloatArrayList fftMaxes, float timePerFft,
+                                  TFloatArrayList[] manyTimes, TFloatArrayList[] fewTimes, 
+                                  TFloatArrayList fftAverages, TFloatArrayList fftMaxes, float timePerFft,
                                   float timePerBeat, float timeOffset, float totalTime,
                                   boolean allowMines) {
             this.stepGranularity = stepGranularity;
             this.skipChance = skipChance;
             this.holdDensity = holdDensity;
+            this.manyTimes = manyTimes;
             this.fewTimes = fewTimes;
             this.fftAverages = fftAverages;
             this.fftMaxes = fftMaxes;
@@ -309,12 +322,12 @@ public class StepGenerator {
     
     @SuppressWarnings("all")
     public String generateNotes(int stepGranularity, int skipChance, int holdDensity,
-                              TFloatArrayList[] fewTimes, TFloatArrayList fftAverages, 
-                              TFloatArrayList fftMaxes, float timePerFft,
+                              TFloatArrayList[] manyTimes, TFloatArrayList[] fewTimes, 
+                              TFloatArrayList fftAverages, TFloatArrayList fftMaxes, float timePerFft,
                               float timePerBeat, float timeOffset, float totalTime,
                               boolean allowMines) {
         NoteGenerationConfig config = new NoteGenerationConfig(
-            stepGranularity, skipChance, holdDensity, fewTimes, fftAverages, 
+            stepGranularity, skipChance, holdDensity, manyTimes, fewTimes, fftAverages, 
             fftMaxes, timePerFft, timePerBeat, timeOffset, totalTime, allowMines);
         return generateNotes(config);
     }
@@ -326,7 +339,6 @@ public class StepGenerator {
         holding[1] = 0f;
         holding[2] = 0f;
         holding[3] = 0f;
-        lastKickTime = 0f;
         commaSeperatorReset = 4 * stepGranularity;
     }
     
@@ -335,9 +347,17 @@ public class StepGenerator {
         float timeGranularity = config.timePerBeat / config.stepGranularity;
         for(float t = config.timeOffset; t <= config.totalTime; t += timeGranularity) {
             StepDecision decision = analyzeStepTiming(t, config, timeIndex);
-            if( AutoStepper.STEP_DEBUG ) {
-                makeNoteLine(getLastNoteLine(), t, timeIndex % 2 == 0 ? 1 : 0, -2, config.allowMines);
-            } else makeNoteLine(getLastNoteLine(), t, decision.steps, decision.holds, config.allowMines);
+            if( AutoStepper.isStepDebug() ) {
+                boolean[] debugSteps = new boolean[4];
+                debugSteps[0] = (timeIndex % 2 == 0);
+                makeNoteLine(getLastNoteLine(), t, debugSteps, -2, config.allowMines);
+            } else {
+                boolean[] stepArray = new boolean[4];
+                if( decision.steps > 0 ) {
+                    stepArray[0] = true; // Place step on first arrow
+                }
+                makeNoteLine(getLastNoteLine(), t, stepArray, decision.holds, config.allowMines);
+            }
             timeIndex++;
         }
         return formatOutput();

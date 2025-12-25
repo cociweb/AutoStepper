@@ -1,6 +1,13 @@
 {
     "name": "AutoStepper Development",
     "image": "mcr.microsoft.com/devcontainers/java:25",
+    "features": {
+        "ghcr.io/devcontainers/features/java:1": {
+            "version": "25",
+            "installMaven": "true",
+            "mavenVersion": "3.9"
+        }
+    },
     "customizations": {
         "vscode": {
             "extensions": [
@@ -14,11 +21,11 @@
                 "java.configuration.runtimes": [
                     {
                         "name": "JavaSE-25",
-                        "path": "/usr/local/sdkman/candidates/java/current",
+                        "path": "/usr/lib/jvm/msopenjdk-current",
                         "default": true
                     }
                 ],
-                "java.jdt.ls.java.home": "/usr/local/sdkman/candidates/java/current",
+                "java.jdt.ls.java.home": "/usr/lib/jvm/msopenjdk-current",
                 "java.configuration.updateBuildConfiguration": "automatic",
                 "java.import.gradle.wrapper.enabled": false,
                 "java.import.maven.enabled": true,
@@ -36,6 +43,7 @@
             }
         }
     },
-    "postCreateCommand": "mvn clean install -DskipTests",
+    "postCreateCommand": "echo 'Dev container setup complete' && mvn --version && mvn clean install -DskipTests",
     "remoteUser": "vscode"
+
 }
