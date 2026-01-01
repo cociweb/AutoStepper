@@ -60,7 +60,7 @@ public class StepGenerator {
     private char stop = '3';
     private char mine = 'M';
     
-    private Random rand = new Random();
+    private Random rand = new Random(System.nanoTime());
     
     private static final Logger logger = Logger.getLogger(StepGenerator.class.getName());
     
@@ -101,10 +101,18 @@ public class StepGenerator {
         }        
         // add new holds if needed
         if( holds > 0 ) {
-            int index = getRandomHold();
-            if( index != -1 ) {
-                holdstops[index] = '2';
-                holding[index] = 1f;
+            // Find an empty arrow position for the new hold
+            ArrayList<Integer> availablePositions = new ArrayList<>();
+            for(int i = 0; i < ARROW_COUNT; i++) {
+                if(holding[i] <= 0f && holdstops[i] == empty) {
+                    availablePositions.add(i);
+                }
+            }
+            if(!availablePositions.isEmpty()) {
+                int idx = rand.nextInt(availablePositions.size());
+                int position = availablePositions.get(idx);
+                holdstops[position] = '2';
+                holding[position] = Math.max(1.0f, (float) holds);  // Hold duration (minimum 1 frame)
             }
         }
         return holdstops;
@@ -169,6 +177,13 @@ public class StepGenerator {
         
         holds = adjustHoldsAndSteps(placeStep, holds, steps);
         char[] noteLine = getHoldStops(getHoldCount(), holds);
+        
+        // Place the actual step arrows ('1') based on placeStep array
+        for(int i = 0; i < ARROW_COUNT; i++) {
+            if(placeStep[i] && noteLine[i] == empty) {
+                noteLine[i] = '1';
+            }
+        }
         
         if( mines ) {
             addMines(noteLine);
@@ -371,6 +386,9 @@ public class StepGenerator {
         public final float timeOffset;
         public final float totalTime;
         public final boolean allowMines;
+        public final float energySensitivity; // Multiplier for energy detection (1.0 = normal, <1.0 = less sensitive)
+        public final String difficultyLevel; // Difficulty level name for logging
+        public final int targetActionCount; // Target number of total actions for quality mode
         
         @SuppressWarnings("all")
         public NoteGenerationConfig(int stepGranularity, int skipChance, int holdDensity,
@@ -378,6 +396,26 @@ public class StepGenerator {
                                   TFloatArrayList fftAverages, TFloatArrayList fftMaxes, float timePerFft,
                                   float timePerBeat, float timeOffset, float totalTime,
                                   boolean allowMines) {
+            this(stepGranularity, skipChance, holdDensity, manyTimes, fewTimes, fftAverages,
+                 fftMaxes, timePerFft, timePerBeat, timeOffset, totalTime, allowMines, 1.0f, "Unknown", -1);
+        }
+        
+        @SuppressWarnings("all")
+        public NoteGenerationConfig(int stepGranularity, int skipChance, int holdDensity,
+                                  TFloatArrayList[] manyTimes, TFloatArrayList[] fewTimes, 
+                                  TFloatArrayList fftAverages, TFloatArrayList fftMaxes, float timePerFft,
+                                  float timePerBeat, float timeOffset, float totalTime,
+                                  boolean allowMines, float energySensitivity) {
+            this(stepGranularity, skipChance, holdDensity, manyTimes, fewTimes, fftAverages,
+                 fftMaxes, timePerFft, timePerBeat, timeOffset, totalTime, allowMines, energySensitivity, "Unknown", -1);
+        }
+        
+        @SuppressWarnings("all")
+        public NoteGenerationConfig(int stepGranularity, int skipChance, int holdDensity,
+                                  TFloatArrayList[] manyTimes, TFloatArrayList[] fewTimes, 
+                                  TFloatArrayList fftAverages, TFloatArrayList fftMaxes, float timePerFft,
+                                  float timePerBeat, float timeOffset, float totalTime,
+                                  boolean allowMines, float energySensitivity, String difficultyLevel, int targetActionCount) {
             this.stepGranularity = stepGranularity;
             this.skipChance = skipChance;
             this.holdDensity = holdDensity;
@@ -390,10 +428,14 @@ public class StepGenerator {
             this.timeOffset = timeOffset;
             this.totalTime = totalTime;
             this.allowMines = allowMines;
+            this.energySensitivity = energySensitivity;
+            this.difficultyLevel = difficultyLevel;
+            this.targetActionCount = targetActionCount;
         }
     }
     
-    public String generateNotes(NoteGenerationConfig config) {      
+    public String generateNotes(NoteGenerationConfig config) {
+        this.currentConfig = config;
         resetState(config.stepGranularity);
         return generateNoteLines(config);
     }
@@ -404,10 +446,96 @@ public class StepGenerator {
                               TFloatArrayList fftAverages, TFloatArrayList fftMaxes, float timePerFft,
                               float timePerBeat, float timeOffset, float totalTime,
                               boolean allowMines) {
+        // Determine difficulty level from parameters
+        String difficultyLevel = determineDifficultyLevel(stepGranularity, skipChance, holdDensity, allowMines);
+        
         NoteGenerationConfig config = new NoteGenerationConfig(
             stepGranularity, skipChance, holdDensity, manyTimes, fewTimes, fftAverages, 
-            fftMaxes, timePerFft, timePerBeat, timeOffset, totalTime, allowMines);
+            fftMaxes, timePerFft, timePerBeat, timeOffset, totalTime, allowMines, 1.0f, difficultyLevel, -1);
+        
+        // Apply quality normalization if not in hard mode
+        if (!AutoStepper.isHardMode()) {
+            config = applyQualityNormalization(config, timePerBeat);
+        }
+        
         return generateNotes(config);
+    }
+    
+    /**
+     * Determines the difficulty level name based on generation parameters
+     */
+    private String determineDifficultyLevel(int stepGranularity, int skipChance, int holdDensity, boolean allowMines) {
+        if (stepGranularity == 2 && skipChance == 8 && holdDensity == 0) {
+            return "Beginner";
+        } else if (stepGranularity == 2 && skipChance == 4 && holdDensity == 1) {
+            return "Easy";
+        } else if (stepGranularity == 2 && skipChance == 2 && holdDensity == 2) {
+            return "Medium";
+        } else if (stepGranularity == 2 && skipChance == 1 && holdDensity == 3) {
+            return "Hard";
+        } else if (stepGranularity == 1 && skipChance == 1 && holdDensity == 5 && allowMines) {
+            return "Challenge";
+        }
+        return "Custom";
+    }
+    
+    /**
+     * Applies quality-based normalization to calibrate step density.
+     * Target: 60 actions per 100 seconds for beginner mode at 100 BPM.
+     * Target: 200 actions per 100 seconds for challenge mode.
+     * Scales with BPM and adjusts energy thresholds accordingly.
+     */
+    private NoteGenerationConfig applyQualityNormalization(NoteGenerationConfig config, float timePerBeat) {
+        // Note: timePerBeat is already doubled for most difficulties (timePerBeat*2)
+        // So we need to account for this in BPM calculation
+        float bpm = 60.0f / timePerBeat;
+        float songDuration = config.totalTime - config.timeOffset;
+        
+        // Calculate target actions per 100 seconds based on difficulty level
+        float targetActionsPer100s;
+        if (config.stepGranularity == 2 && config.skipChance == 8) {
+            targetActionsPer100s = 60.0f * (bpm / 100.0f);  // Beginner
+        } else if (config.stepGranularity == 2 && config.skipChance == 4) {
+            targetActionsPer100s = 90.0f * (bpm / 100.0f);  // Easy
+        } else if (config.stepGranularity == 2 && config.skipChance == 2) {
+            targetActionsPer100s = 120.0f * (bpm / 100.0f); // Medium
+        } else if (config.stepGranularity == 2 && config.skipChance == 1) {
+            targetActionsPer100s = 150.0f * (bpm / 100.0f); // Hard
+        } else if (config.stepGranularity == 4 && config.skipChance == 1) {
+            targetActionsPer100s = 200.0f * (bpm / 100.0f); // Challenge
+        } else {
+            targetActionsPer100s = 150.0f * (bpm / 100.0f); // Default
+        }
+        
+        float targetTotalActions = (targetActionsPer100s / 100.0f) * songDuration;
+        
+        // Calculate energy sensitivity based on target density
+        // Lower values = fewer actions detected
+        float energySensitivity = Math.min(1.0f, targetTotalActions / (songDuration * 2.0f));
+        energySensitivity = Math.max(0.1f, energySensitivity);
+        
+        if (logger.isLoggable(java.util.logging.Level.INFO)) {
+            logger.info(String.format("Quality: %s - Target %.0f actions (%.1f/100s) for %.1fs @ %.1f BPM",
+                config.difficultyLevel, targetTotalActions, targetActionsPer100s, songDuration, bpm));
+        }
+        
+        return new NoteGenerationConfig(
+            config.stepGranularity,
+            config.skipChance,
+            config.holdDensity,
+            config.manyTimes,
+            config.fewTimes,
+            config.fftAverages,
+            config.fftMaxes,
+            config.timePerFft,
+            config.timePerBeat,
+            config.timeOffset,
+            config.totalTime,
+            config.allowMines,
+            energySensitivity,
+            config.difficultyLevel,
+            (int)targetTotalActions
+        );
     }
     
     /**
@@ -423,9 +551,19 @@ public class StepGenerator {
     
     private String generateNoteLines(NoteGenerationConfig config) {
         int timeIndex = 0;
+        int actionCount = 0;
+        float t = config.timeOffset;
         float timeGranularity = config.timePerBeat / config.stepGranularity;
-        for(float t = config.timeOffset; t <= config.totalTime; t += timeGranularity) {
+        
+        while( t < config.totalTime ) {
             StepDecision decision = analyzeStepTiming(t, config, timeIndex);
+            
+            // Apply quality control - stop generating if we've reached target
+            if (config.targetActionCount > 0 && actionCount >= config.targetActionCount) {
+                decision.steps = 0;
+                decision.holds = 0;
+            }
+            
             if( AutoStepper.isStepDebug() ) {
                 boolean[] debugSteps = new boolean[ARROW_COUNT];
                 debugSteps[0] = (timeIndex % 2 == 0);
@@ -434,10 +572,15 @@ public class StepGenerator {
                 boolean[] stepArray = new boolean[ARROW_COUNT];
                 if( decision.steps > 0 ) {
                     stepArray[0] = true; // Place step on first arrow
+                    actionCount++; // Count taps
+                }
+                if( decision.holds > 0 ) {
+                    actionCount++; // Count holds
                 }
                 makeNoteLine(getLastNoteLine(), t, stepArray, decision.holds, config.allowMines);
             }
             timeIndex++;
+            t += timeGranularity;
         }
         return formatOutput();
     }
@@ -453,12 +596,14 @@ public class StepGenerator {
         StepDecision decision = new StepDecision();
         if( t > 0f ) {
             float fftmax = getFft(t, config.fftMaxes, config.timePerFft);
+            // Use normal thresholds for sustained energy detection (for holds)
             boolean sustained = sustainedFft(t, SUSTAINED_FFT_LENGTH, config.timePerBeat / config.stepGranularity, 
                                            config.timePerFft, config.fftMaxes, config.fftAverages, SUSTAINED_FFT_THRESHOLD, SUSTAINED_FFT_MULTIPLIER);
             boolean nearKick = isNearATime(t, config.fewTimes[AutoStepper.KICKS], config.timePerBeat / config.stepGranularity);
             boolean nearSnare = isNearATime(t, config.fewTimes[AutoStepper.SNARE], config.timePerBeat / config.stepGranularity);
             boolean nearEnergy = isNearATime(t, config.fewTimes[AutoStepper.ENERGY], config.timePerBeat / config.stepGranularity);
             
+            // Original simple logic - works correctly
             decision.steps = sustained || nearKick || nearSnare || nearEnergy ? 1 : 0;
             if( sustained ) {
                 decision.holds = config.holdDensity * 2 + (nearEnergy ? config.holdDensity : 0);
@@ -482,12 +627,30 @@ public class StepGenerator {
     }
     
     private StepDecision applySkipLogic(StepDecision decision, NoteGenerationConfig config, int timeIndex, float t) {
-        if( timeIndex % 2 == 1 &&
-            (config.skipChance > 1 && timeIndex % 2 == 1 && rand.nextInt(config.skipChance) > 0 || getHoldCount() > 0) ||
-            t - lastJumpTime < config.timePerBeat ) {
-            decision.steps = 0;
-            if( decision.holds > 0 ) decision.holds = 0;
+        // Apply skip logic to control difficulty
+        // Higher skipChance = more skipping = easier (fewer actions)
+        boolean shouldSkip = false;
+        
+        // Apply skipChance on ALL time indices, not just odd ones
+        if (config.skipChance > 1 && decision.steps > 0) {
+            shouldSkip = rand.nextInt(config.skipChance) > 0;
         }
+        
+        // Also skip if there are existing holds (to avoid conflicts)
+        if (getHoldCount() > 0) {
+            shouldSkip = true;
+        }
+        
+        // Also skip if too close to last jump
+        if (t - lastJumpTime < config.timePerBeat) {
+            shouldSkip = true;
+        }
+        
+        if (shouldSkip) {
+            decision.steps = 0;
+            if (decision.holds > 0) decision.holds = 0;
+        }
+        
         return decision;
     }
     
@@ -548,7 +711,12 @@ public class StepGenerator {
      */
     private NoteStatistics calculateStatistics(String[] lines) {
         NoteStatistics stats = new NoteStatistics();
+        
+        // Build the complete output string from lines for hold/mine counting
+        StringBuilder allNotesStr = new StringBuilder();
         for (String line : lines) {
+            allNotesStr.append(line);
+            
             int ones = line.length() - line.replace("1", "").length();
             int twos = line.length() - line.replace("2", "").length();
             if ((ones == 1 || twos == 1) && (ones + twos == 1)) stats.taps++;
@@ -556,11 +724,14 @@ public class StepGenerator {
             else if (ones == 3) stats.hands++;
             else if (ones >= 4) stats.quads++;
         }
-        String allNotesStr = allNoteLines.toString();
-        stats.holdCount = allNotesStr.length() - allNotesStr.replace("2", "").length();
-        stats.mineCount = allNotesStr.length() - allNotesStr.replace("M", "").length();
+        
+        String allNotes = allNotesStr.toString();
+        stats.holdCount = allNotes.length() - allNotes.replace("2", "").length();
+        stats.mineCount = allNotes.length() - allNotes.replace("M", "").length();
         return stats;
     }
+    
+    private NoteGenerationConfig currentConfig;
     
     /**
      * Logs statistics about the generated notes
@@ -568,8 +739,9 @@ public class StepGenerator {
      */
     private void logStatistics(NoteStatistics stats) {
         if (logger.isLoggable(java.util.logging.Level.INFO)) {
-            logger.info(String.format("Taps: %d, Jumps: %d, Hands: %d, Quads: %d, Holds: %d, Mines: %d", 
-                stats.taps + stats.jumps, stats.jumps, stats.hands, stats.quads, stats.holdCount, stats.mineCount));
+            String level = currentConfig != null ? currentConfig.difficultyLevel : "Unknown";
+            logger.info(String.format("Level: %s, Taps: %d, Jumps: %d, Hands: %d, Quads: %d, Holds: %d, Mines: %d", 
+                level, stats.taps + stats.jumps, stats.jumps, stats.hands, stats.quads, stats.holdCount, stats.mineCount));
         }
     }
     

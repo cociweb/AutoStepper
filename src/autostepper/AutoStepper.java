@@ -575,7 +575,8 @@ public class AutoStepper {
           midFFTAmountVal += fftVal;
           if (fftVal > midFFTMax) midFFTMax = fftVal;
       }
-      context.midFFTAmount.add(midFFTAmountVal);
+      // Store average, not sum, for proper sustained energy detection
+      context.midFFTAmount.add(midFFTAmountVal / fftSize);
       context.midFFTMaxes.add(midFFTMax);
 
       // store the time of each beat
@@ -1085,11 +1086,16 @@ void analyzeUsingAudioRecordingStream(File filename, float seconds, String outpu
     
     if( config.hardMode && isStepDebug() ) logger.fine("Hard mode enabled! Extra steps for you! ;-)");
     
-    SMGenerator.addNotes(smfile, SMGenerator.getBeginner(), stepGenerator.generateNotes(4, 8, 0, context.manyTimes, context.fewTimes, context.midFFTAmount, context.midFFTMaxes, context.timePerSample, timePerBeat*2, startTime, effectiveTime, false));
-    SMGenerator.addNotes(smfile, SMGenerator.getEasy(), stepGenerator.generateNotes(4, 4, 1, context.manyTimes, context.fewTimes, context.midFFTAmount, context.midFFTMaxes, context.timePerSample, timePerBeat*2, startTime, effectiveTime, false));
-    SMGenerator.addNotes(smfile, SMGenerator.getMedium(), stepGenerator.generateNotes(2, 2, 2, context.manyTimes, context.fewTimes, context.midFFTAmount, context.midFFTMaxes, context.timePerSample, timePerBeat*2, startTime, effectiveTime, false));
-    SMGenerator.addNotes(smfile, SMGenerator.getHard(), stepGenerator.generateNotes(2, 1, 3, context.manyTimes, context.fewTimes, context.midFFTAmount, context.midFFTMaxes, context.timePerSample, timePerBeat*2, startTime, effectiveTime, false));
-    SMGenerator.addNotes(smfile, SMGenerator.getChallenge(), stepGenerator.generateNotes(1, 1, 5, context.manyTimes, context.fewTimes, context.midFFTAmount, context.midFFTMaxes, context.timePerSample, timePerBeat, startTime, effectiveTime, true));
+    // Adjusted parameters to ensure strict difficulty progression: Beginner << Easy << Medium << Hard << Challenge
+    // stepGranularity: 2 for most difficulties, 4 for challenge (checks 4x per beat for maximum density)
+    // skipChance decreases with difficulty: 8 -> 4 -> 2 -> 1 -> 1 (higher = more skipping = easier)
+    // holdDensity increases with difficulty: 0 -> 1 -> 2 -> 3 -> 5 (more holds = harder)
+    // Challenge uses stepGranularity=4 with skipChance=1 to maximize action density
+    SMGenerator.addNotes(smfile, SMGenerator.getBeginner(), stepGenerator.generateNotes(2, 8, 0, context.manyTimes, context.fewTimes, context.midFFTAmount, context.midFFTMaxes, context.timePerSample, timePerBeat, startTime, effectiveTime, false));
+    SMGenerator.addNotes(smfile, SMGenerator.getEasy(), stepGenerator.generateNotes(2, 4, 1, context.manyTimes, context.fewTimes, context.midFFTAmount, context.midFFTMaxes, context.timePerSample, timePerBeat, startTime, effectiveTime, false));
+    SMGenerator.addNotes(smfile, SMGenerator.getMedium(), stepGenerator.generateNotes(2, 2, 2, context.manyTimes, context.fewTimes, context.midFFTAmount, context.midFFTMaxes, context.timePerSample, timePerBeat, startTime, effectiveTime, false));
+    SMGenerator.addNotes(smfile, SMGenerator.getHard(), stepGenerator.generateNotes(2, 1, 3, context.manyTimes, context.fewTimes, context.midFFTAmount, context.midFFTMaxes, context.timePerSample, timePerBeat, startTime, effectiveTime, false));
+    SMGenerator.addNotes(smfile, SMGenerator.getChallenge(), stepGenerator.generateNotes(4, 1, 5, context.manyTimes, context.fewTimes, context.midFFTAmount, context.midFFTMaxes, context.timePerSample, timePerBeat, startTime, effectiveTime, true));
     SMGenerator.complete(smfile);
     
     logger.info("[--------- SUCCESS ----------]");
