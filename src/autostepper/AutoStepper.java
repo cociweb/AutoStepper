@@ -45,7 +45,7 @@ public class AutoStepper {
      */
     private static class Configuration {
         boolean stepDebug = false;
-        float maxBpm = 170f;
+        float maxBpm = 200f;
         float minBpm = 70f;
         float bpmSensitivity = 0.05f;
         float startSync = 0.0f;
@@ -56,10 +56,6 @@ public class AutoStepper {
         boolean downloadImages = true;
         float clearance = 0.0f;
     }
-    
-    private static final String SECONDS_SUFFIX = " seconds";
-    
-    private static final String DEFAULT_FALSE = "false";
     
     private static final Logger logger = Logger.getLogger(AutoStepper.class.getName());
     
@@ -187,11 +183,11 @@ public class AutoStepper {
         config.maxBpm = Float.parseFloat(getArg(args, MAX_BPM_ARG, "170"));
         config.bpmSensitivity = Float.parseFloat(getArg(args, BPM_SENSITIVITY_ARG, "0.05"));
         config.startSync = Float.parseFloat(getArg(args, START_SYNC_ARG, "0"));
-        config.useTapper = !getArg(args, TAP_ARG, DEFAULT_FALSE).equals(DEFAULT_FALSE);
+        config.useTapper = !getArg(args, TAP_ARG, "false").equals("false");
         config.tapSync = Double.parseDouble(getArg(args, TAP_SYNC_ARG, "-0.11"));
-        config.hardMode = !getArg(args, HARD_ARG, DEFAULT_FALSE).equals(DEFAULT_FALSE);
-        config.updateSm = !getArg(args, UPDATE_SM_ARG, DEFAULT_FALSE).equals(DEFAULT_FALSE);
-        config.downloadImages = !getArg(args, DOWNLOAD_IMAGES_ARG, "true").equals(DEFAULT_FALSE);
+        config.hardMode = !getArg(args, HARD_ARG, "false").equals("false");
+        config.updateSm = !getArg(args, UPDATE_SM_ARG, "false").equals("false");
+        config.downloadImages = !getArg(args, DOWNLOAD_IMAGES_ARG, "true").equals("false");
         config.stepDebug = hasArg(args, DEBUG_ARG);
         config.clearance = Float.parseFloat(getArg(args, CLEARANCE_ARG, "0"));
         return outputDir;
@@ -387,13 +383,20 @@ public class AutoStepper {
             return;
         }
         float commonBPM = 60f / period;
-        if( commonBPM > config.maxBpm ) {
-            common.add(commonBPM * 0.5f);
-        } else if( commonBPM < config.minBpm / 2f ) {
-            common.add(commonBPM * 4f);
-        } else if( commonBPM < config.minBpm ) {
-            common.add(commonBPM * 2f);
-        } else common.add(commonBPM);
+        
+        // Adjust BPM to fall within valid range by halving or doubling
+        while (commonBPM > config.maxBpm && commonBPM > config.minBpm) {
+            commonBPM *= 0.5f;
+        }
+        
+        while (commonBPM < config.minBpm && commonBPM * 2f <= config.maxBpm) {
+            commonBPM *= 2f;
+        }
+        
+        // Only add if within valid range
+        if (commonBPM >= config.minBpm && commonBPM <= config.maxBpm) {
+            common.add(commonBPM);
+        }
     }
     
     private static float tappedOffset;
@@ -467,20 +470,13 @@ public class AutoStepper {
         context.buffer = buffer;
 
         // figure out how many samples are in the stream so we can allocate the correct number of spectra
-        int totalSamples = 0;
-        if (fullSongMode) {
-            totalSamples = (int)( songTime * stream.getFormat().getSampleRate() );
-        }
+        int totalSamples = (int)( songTime * stream.getFormat().getSampleRate() );
         context.totalSamples = totalSamples;
 
         float timePerSample = fftSize / stream.getFormat().getSampleRate();
         context.timePerSample = timePerSample;
 
         int totalChunks = (totalSamples / fftSize) + 1;
-        if (!fullSongMode) {
-            // For limited duration, cap the chunks
-            totalChunks = Math.min(totalChunks, (int)(songTime * stream.getFormat().getSampleRate() / fftSize) + 1);
-        }
         context.totalChunks = totalChunks;
 
         if (isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine(String.format("Processing %d chunks for %s seconds%s", totalChunks, songTime, (fullSongMode ? " (full song mode)" : "")));
@@ -499,10 +495,20 @@ public class AutoStepper {
 
         TFloatArrayList onsetStrengths = new TFloatArrayList();
         context.onsetStrengths = onsetStrengths;
+        
+        context.chunkCount = 0;  // Initialize chunk counter
 
         // Perform the beat detection loop
         context.actualSongTime = runBeatDetectionLoop(context, fftSize);
         context.previousEnergy = 0f;  // Initialize previousEnergy
+        
+        // Log final beat detection results
+        logger.info(String.format("Beat detection complete: Processed %d chunks, found K=%d/%d H=%d/%d S=%d/%d E=%d/%d beats",
+            context.chunkCount,
+            context.fewTimes[KICKS].size(), context.manyTimes[KICKS].size(),
+            context.fewTimes[HAT].size(), context.manyTimes[HAT].size(),
+            context.fewTimes[SNARE].size(), context.manyTimes[SNARE].size(),
+            context.fewTimes[ENERGY].size(), context.manyTimes[ENERGY].size()));
 
     return context;
   }
@@ -549,6 +555,8 @@ public class AutoStepper {
   }
 
   private static void analyzeChunk(AudioAnalysisContext context, float[] data, int fftSize, float time) {
+      context.chunkCount++;
+      
       // now analyze the left channel
       context.manybd.detect(data, time);
       context.fewbd.detect(data, time);
@@ -580,10 +588,43 @@ public class AutoStepper {
       if (context.fewbde.isOnset()) context.fewTimes[ENERGY].add(time);
   }
 
-  private static class BPMResult {
+  public static class BPMChange {
+    public float timestamp;  // Time in seconds when BPM changes
+    public float bpm;        // New BPM value at this timestamp
+    public float confidence; // Confidence score (0-1) based on occurrence frequency
+    
+    public BPMChange(float timestamp, float bpm) {
+      this(timestamp, bpm, 1.0f);
+    }
+    
+    public BPMChange(float timestamp, float bpm, float confidence) {
+      this.timestamp = timestamp;
+      this.bpm = bpm;
+      this.confidence = confidence;
+    }
+  }
+  
+  private static class BPMCandidate {
     float bpm;
+    int occurrences;
+    float confidence;
+    
+    BPMCandidate(float bpm) {
+      this.bpm = bpm;
+      this.occurrences = 1;
+      this.confidence = 0f;
+    }
+  }
+  
+  private static class BPMResult {
+    float bpm;  // Primary/average BPM
     float timePerBeat;
     float startTime;
+    ArrayList<BPMChange> bpmChanges;  // List of BPM changes throughout the song
+    
+    BPMResult() {
+      bpmChanges = new ArrayList<>();
+    }
   }
     
     private static BPMResult calculateBPM(AudioAnalysisContext context, File filename, String outputDir, float autocorrBPM) {
@@ -620,9 +661,215 @@ public class AutoStepper {
             }
             result.bpm = 120.0f; // Standard fallback BPM
             result.timePerBeat = 0.5f; // 60.0 / 120.0
+        } else {
+            // Detect multiple BPM changes throughout the song (only if we have a valid base BPM)
+            detectBPMChanges(context, result);
+            
+            // Log detected BPM with tempo change information
+            if (result.bpmChanges.isEmpty()) {
+                logger.info(String.format("✓ Using detected BPM: %.2f (constant tempo)", result.bpm));
+            } else {
+                logger.info(String.format("✓ Using detected BPM: %.2f with %d tempo changes", result.bpm, result.bpmChanges.size()));
+                for (BPMChange change : result.bpmChanges) {
+                    logger.info(String.format("  - %.3fs: %.2f BPM (%.0f%% confidence)", change.timestamp, change.bpm, change.confidence * 100));
+                }
+            }
         }
         result.startTime = timing.startTime;
         return result;
+    }
+    
+    /**
+     * Detects BPM changes throughout the song by analyzing beat patterns in time segments.
+     * Uses confidence-based approach with occurrence tracking and 5% deviation threshold.
+     */
+    private static void detectBPMChanges(AudioAnalysisContext context, BPMResult result) {
+        final int MAX_BPM_CHANGES = 5;
+        final float MIN_SEGMENT_DURATION = 5.0f; // Minimum 5 seconds per segment (improved granularity)
+        final float MIN_DEVIATION_PERCENT = 0.05f; // 5% minimum deviation
+        final float MIN_CONFIDENCE = 0.2f; // Minimum 20% confidence (occurrences/total segments)
+        
+        float songDuration = context.actualSongTime;
+        if (songDuration < MIN_SEGMENT_DURATION * 2) {
+            return;
+        }
+        
+        // Divide song into segments and collect all BPM candidates
+        // Allow up to 12 segments for better granularity (was 6)
+        int numSegments = Math.min(12, (int)(songDuration / MIN_SEGMENT_DURATION));
+        float segmentDuration = songDuration / numSegments;
+        
+        logger.info(String.format("Analyzing %d segments (%.1fs each) for tempo changes...", numSegments, segmentDuration));
+        
+        // Collect BPM candidates from all segments with their timestamps
+        ArrayList<BPMCandidate> candidates = new ArrayList<>();
+        ArrayList<Float> segmentTimestamps = new ArrayList<>();
+        ArrayList<Float> segmentBPMs = new ArrayList<>();
+        
+        for (int seg = 0; seg < numSegments; seg++) {
+            float segmentStart = seg * segmentDuration;
+            float segmentEnd = (seg + 1) * segmentDuration;
+            
+            BPMCandidateResult candidateResult = analyzeBPMInTimeRangeWithConfidence(context, segmentStart, segmentEnd);
+            
+            if (candidateResult != null && candidateResult.bpm > 0) {
+                segmentTimestamps.add(segmentStart);
+                segmentBPMs.add(candidateResult.bpm);
+                
+                // Track BPM occurrences
+                addOrUpdateCandidate(candidates, candidateResult.bpm, candidateResult.confidence);
+                
+                if (isStepDebug()) {
+                    logger.fine(String.format("  Segment %d (%.1f-%.1fs): BPM=%.2f, confidence=%.2f", 
+                        seg, segmentStart, segmentEnd, candidateResult.bpm, candidateResult.confidence));
+                }
+            }
+        }
+        
+        if (candidates.isEmpty() || segmentBPMs.isEmpty()) {
+            logger.warning("No valid BPM candidates found in any segment");
+            return;
+        }
+        
+        // Calculate confidence for each candidate based on occurrences
+        for (BPMCandidate candidate : candidates) {
+            candidate.confidence = (float)candidate.occurrences / numSegments;
+        }
+        
+        // Sort candidates by confidence (descending)
+        candidates.sort((a, b) -> Float.compare(b.confidence, a.confidence));
+        
+        // Log all candidates
+        logger.info(String.format("Found %d BPM candidates:", candidates.size()));
+        for (BPMCandidate candidate : candidates) {
+            logger.info(String.format("  %.2f BPM: %d occurrences (%.1f%% confidence)", 
+                candidate.bpm, candidate.occurrences, candidate.confidence * 100));
+        }
+        
+        // Use the most confident BPM from segments, or keep the existing base BPM if it's more reliable
+        float baseBPM = result.bpm; // Keep the already-validated base BPM
+        
+        // If segment analysis found a significantly different BPM with high confidence, consider using it
+        if (candidates.get(0).confidence > 0.5f && Math.abs(candidates.get(0).bpm - baseBPM) > baseBPM * 0.1f) {
+            logger.info(String.format("Segment analysis suggests different base BPM: %.2f (%.0f%% confidence) vs current %.2f",
+                candidates.get(0).bpm, candidates.get(0).confidence * 100, baseBPM));
+        }
+        
+        // Detect significant tempo changes with confidence filtering
+        result.bpmChanges.add(new BPMChange(0.0f, baseBPM, 1.0f));
+        
+        float currentBPM = baseBPM;
+        for (int i = 0; i < segmentBPMs.size(); i++) {
+            float segmentBPM = segmentBPMs.get(i);
+            float timestamp = segmentTimestamps.get(i);
+            
+            // Calculate deviation percentage
+            float deviation = Math.abs(segmentBPM - currentBPM) / currentBPM;
+            
+            // Find confidence for this BPM
+            float confidence = 0f;
+            for (BPMCandidate candidate : candidates) {
+                if (Math.abs(candidate.bpm - segmentBPM) < 1.0f) {
+                    confidence = candidate.confidence;
+                    break;
+                }
+            }
+            
+            // Only add if deviation > 5% and confidence is high enough
+            if (deviation >= MIN_DEVIATION_PERCENT && confidence >= MIN_CONFIDENCE) {
+                if (result.bpmChanges.size() < MAX_BPM_CHANGES) {
+                    result.bpmChanges.add(new BPMChange(timestamp, segmentBPM, confidence));
+                    logger.info(String.format("  Tempo change at %.1fs: %.2f -> %.2f BPM (%.1f%% deviation, %.1f%% confidence)",
+                        timestamp, currentBPM, segmentBPM, deviation * 100, confidence * 100));
+                    currentBPM = segmentBPM;
+                }
+            }
+        }
+        
+        // If only one BPM detected, clear the list (constant tempo)
+        if (result.bpmChanges.size() == 1) {
+            result.bpmChanges.clear();
+            logger.info("Constant tempo detected - no significant changes");
+        } else {
+            logger.info(String.format("Detected %d tempo changes", result.bpmChanges.size() - 1));
+        }
+    }
+    
+    private static void addOrUpdateCandidate(ArrayList<BPMCandidate> candidates, float bpm, float confidence) {
+        // Find existing candidate within 1 BPM tolerance
+        for (BPMCandidate candidate : candidates) {
+            if (Math.abs(candidate.bpm - bpm) < 1.0f) {
+                candidate.occurrences++;
+                return;
+            }
+        }
+        // Add new candidate
+        candidates.add(new BPMCandidate(bpm));
+    }
+    
+    private static class BPMCandidateResult {
+        float bpm;
+        float confidence;
+        
+        BPMCandidateResult(float bpm, float confidence) {
+            this.bpm = bpm;
+            this.confidence = confidence;
+        }
+    }
+    
+    /**
+     * Analyzes BPM in a specific time range with confidence scoring.
+     */
+    private static BPMCandidateResult analyzeBPMInTimeRangeWithConfidence(AudioAnalysisContext context, float startTime, float endTime) {
+        TFloatArrayList segmentCommon = new TFloatArrayList();
+        float doubleSpeed = 60f / (config.maxBpm * 2f);
+        
+        int totalBeats = 0;
+        // Filter beats within time range for each frequency band
+        for (int i = 0; i < context.fewTimes.length; i++) {
+            TFloatArrayList fewSegment = filterBeatsInRange(context.fewTimes[i], startTime, endTime);
+            TFloatArrayList manySegment = filterBeatsInRange(context.manyTimes[i], startTime, endTime);
+            
+            totalBeats += fewSegment.size() + manySegment.size();
+            
+            if (fewSegment.size() > 5) {
+                addCommonBPMs(segmentCommon, fewSegment, doubleSpeed, context.timePerSample * 1.5f);
+            }
+            if (manySegment.size() > 5) {
+                addCommonBPMs(segmentCommon, manySegment, doubleSpeed, context.timePerSample * 1.5f);
+            }
+        }
+        
+        if (segmentCommon.isEmpty() || totalBeats < 5) {
+            return null;
+        }
+        
+        float bpm = getMostCommon(segmentCommon, 1f, true);
+        
+        // Validate BPM range
+        if (!isValidFloat(bpm) || bpm < config.minBpm || bpm > config.maxBpm) {
+            return null;
+        }
+        
+        // Calculate confidence based on number of BPM candidates and beat count
+        // Lower thresholds for segment analysis
+        float confidence = Math.min(1.0f, (float)segmentCommon.size() / 10.0f) * Math.min(1.0f, (float)totalBeats / 30.0f);
+        
+        return new BPMCandidateResult(bpm, confidence);
+    }
+    
+    /**
+     * Filters beat times to only include those within the specified time range.
+     */
+    private static TFloatArrayList filterBeatsInRange(TFloatArrayList beats, float startTime, float endTime) {
+        TFloatArrayList filtered = new TFloatArrayList();
+        for (int i = 0; i < beats.size(); i++) {
+            float beatTime = beats.getQuick(i);
+            if (beatTime >= startTime && beatTime < endTime) {
+                filtered.add(beatTime);
+            }
+        }
+        return filtered;
     }
 
     private static BPMResult selectTimingFromCommon(TFloatArrayList common) {
@@ -751,7 +998,7 @@ void analyzeUsingAudioRecordingStream(File filename, float seconds, String outpu
     // Update songTime to actual duration processed
     if (fullSongMode && context.actualSongTime > 0) {
         songTime = context.actualSongTime;
-        if (isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine(String.format("Actual song duration processed: %s%s", songTime, SECONDS_SUFFIX));
+        if (isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine(String.format("Actual song duration processed: %s seconds", songTime));
     }
     float autocorrBPM = computeAutocorrBPM(context.onsetStrengths, context.timePerSample);
     if (isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine(String.format("Autocorr BPM: %s", autocorrBPM));
@@ -770,7 +1017,7 @@ void analyzeUsingAudioRecordingStream(File filename, float seconds, String outpu
     
     // start making the SM
     StepGenerator stepGenerator = new StepGenerator();
-    BufferedWriter smfile = SMGenerator.generateSmFromPath(bpm, startTime, filename, outputDir);
+    BufferedWriter smfile = SMGenerator.generateSmFromPath(bpm, startTime, bpmResult.bpmChanges, filename, outputDir);
     
     if( config.hardMode && isStepDebug() ) logger.fine("Hard mode enabled! Extra steps for you! ;-)");
     
@@ -800,7 +1047,7 @@ private static float determineSongTimeSeconds(File filename, boolean fullSongMod
         }
         if (songTime <= 0f) {
             songTime = 600f;  // Fallback to 10 minutes
-            if (isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine(String.format("Audio length unknown, estimating up to %s%s", songTime, SECONDS_SUFFIX));
+            if (isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine(String.format("Audio length unknown, estimating up to %s seconds", songTime));
         }
     } catch (IOException | UnsupportedAudioFileException e) {
         logger.warning(String.format("Could not determine audio length from file: %s", e.getMessage()));
@@ -816,7 +1063,7 @@ private static float readAudioFileDurationSeconds(File filename) throws IOExcept
     float frameRate = aff.getFormat().getFrameRate();
     if (frameLength > 0 && frameRate > 0) {
         float songTime = frameLength / frameRate;  // Length in seconds
-        if (isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine(String.format("Audio length from AudioFileFormat: %s%s", songTime, SECONDS_SUFFIX));
+        if (isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine(String.format("Audio length from AudioFileFormat: %s seconds", songTime));
         return songTime;
     }
     // Check properties for duration (some MP3 SPIs populate this)
@@ -824,7 +1071,7 @@ private static float readAudioFileDurationSeconds(File filename) throws IOExcept
     if (props.containsKey(DURATION_ARG)) {
         long durationMicros = ((Long) props.get(DURATION_ARG)).longValue();
         float songTime = durationMicros / 1_000_000f;  // Convert microseconds to seconds
-        if (isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine(String.format("Audio length from properties: %s%s", songTime, SECONDS_SUFFIX));
+        if (isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine(String.format("Audio length from properties: %s seconds", songTime));
         return songTime;
     }
     return -1f;
@@ -840,26 +1087,22 @@ private static float computeLargestAvg(AudioAnalysisContext context) {
 
   private static class AudioAnalysisContext {
     AudioRecordingStream stream;
-    BeatDetect manybd;
-    BeatDetect fewbd;
-    BeatDetect manybde;
-    BeatDetect fewbde;
+    BeatDetect manybd, fewbd, manybde, fewbde;
     FFT fft;
     MultiChannelBuffer buffer;
-    float songTime;
     int totalSamples;
-    int totalChunks;
     float timePerSample;
-    boolean fullSongMode;
+    int totalChunks;
     TFloatArrayList[] manyTimes;
     TFloatArrayList[] fewTimes;
     TFloatArrayList midFFTAmount;
     TFloatArrayList midFFTMaxes;
     TFloatArrayList onsetStrengths;
-    float largestAvg;
-    float largestMax;
     float actualSongTime;
     float previousEnergy;
+    int chunkCount;  // Track number of chunks processed
+    float songTime;
+    boolean fullSongMode;
     float bpm;
     float timePerBeat;
     float startTime;

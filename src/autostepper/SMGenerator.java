@@ -15,6 +15,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.logging.Logger;
 
 
@@ -106,6 +107,18 @@ public class SMGenerator {
     }
     
     public static BufferedWriter generateSmFromPath(float bpm, float startTime, File songfile, String outputdir) {
+        return generateSmFromPath(bpm, startTime, null, songfile, outputdir);
+    }
+    
+    /**
+     * Generates SM file with support for multiple BPM changes.
+     * @param bpm Primary BPM value
+     * @param startTime Start time offset
+     * @param bpmChanges List of BPM changes (timestamp, bpm pairs), or null for constant tempo
+     * @param songfile Source audio file
+     * @param outputdir Output directory
+     */
+    public static BufferedWriter generateSmFromPath(float bpm, float startTime, ArrayList<AutoStepper.BPMChange> bpmChanges, File songfile, String outputdir) {
         String filename = songfile.getName();
         
         // Extract and process song metadata
@@ -118,7 +131,7 @@ public class SMGenerator {
         File smfile = setupOutputFile(outputdir, filename);
         
         // Write SM file content
-        return writeSMFile(smfile, songfile, metadata, imgFileName, bpm, startTime, filename);
+        return writeSMFile(smfile, songfile, metadata, imgFileName, bpm, startTime, bpmChanges, filename);
     }
     
     private static class SongMetadata {
@@ -248,9 +261,17 @@ public class SMGenerator {
     }
     
     private static BufferedWriter writeSMFile(File smfile, File songfile, SongMetadata metadata, String imgFileName, float bpm, float startTime, String filename) {
+        return writeSMFile(smfile, songfile, metadata, imgFileName, bpm, startTime, null, filename);
+    }
+    
+    private static BufferedWriter writeSMFile(File smfile, File songfile, SongMetadata metadata, String imgFileName, float bpm, float startTime, ArrayList<AutoStepper.BPMChange> bpmChanges, String filename) {
         try {
             deleteExistingSMFile(smfile);
             copyFileUsingStream(songfile, new File(smfile.getParent(), filename));
+            
+            // Format BPM string - either single BPM or multiple BPM changes
+            String bpmString = formatBPMString(bpm, bpmChanges);
+            
             BufferedWriter writer = new BufferedWriter(new FileWriter(smfile));
             writer.write(HEADER.replace("$TITLE", metadata.shortName)
                              .replace("$ARTIST", metadata.artist)
@@ -258,12 +279,35 @@ public class SMGenerator {
                              .replace("$BGIMAGE", imgFileName)
                              .replace("$MUSICFILE", filename)
                              .replace("$STARTTIME", Float.toString(startTime + AutoStepper.getStartSync()))
-                             .replace("$BPM", Float.toString(bpm)));
+                             .replace("$BPM", bpmString));
             return writer;
         } catch(Exception e) {
             // Ignore exceptions during file writing
         }
         return null;
+    }
+    
+    /**
+     * Formats the BPM string for the #BPMS line in SM file format.
+     * Format: timestamp1=bpm1,timestamp2=bpm2,...
+     * Example: 0.000=128.000,64.000=256.000,164.000=156.000
+     */
+    private static String formatBPMString(float defaultBpm, ArrayList<AutoStepper.BPMChange> bpmChanges) {
+        if (bpmChanges == null || bpmChanges.isEmpty()) {
+            // Single constant BPM
+            return String.format("%.3f", defaultBpm);
+        }
+        
+        // Multiple BPM changes
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < bpmChanges.size(); i++) {
+            AutoStepper.BPMChange change = bpmChanges.get(i);
+            if (i > 0) {
+                sb.append(",");
+            }
+            sb.append(String.format("%.3f=%.3f", change.timestamp, change.bpm));
+        }
+        return sb.toString();
     }
     
     private static void deleteExistingSMFile(File smfile) {
