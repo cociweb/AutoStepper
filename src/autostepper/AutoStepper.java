@@ -999,6 +999,9 @@ void analyzeUsingAudioRecordingStream(File filename, float seconds, String outpu
     if (fullSongMode && context.actualSongTime > 0) {
         songTime = context.actualSongTime;
         if (isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine(String.format("Actual song duration processed: %s seconds", songTime));
+    } else if (!fullSongMode && seconds > 0) {
+        // For limited duration mode, use the requested duration
+        songTime = seconds;
     }
     float autocorrBPM = computeAutocorrBPM(context.onsetStrengths, context.timePerSample);
     if (isStepDebug() && logger.isLoggable(Level.FINE)) logger.fine(String.format("Autocorr BPM: %s", autocorrBPM));
@@ -1017,7 +1020,7 @@ void analyzeUsingAudioRecordingStream(File filename, float seconds, String outpu
     
     // start making the SM
     StepGenerator stepGenerator = new StepGenerator();
-    BufferedWriter smfile = SMGenerator.generateSmFromPath(bpm, startTime, bpmResult.bpmChanges, filename, outputDir);
+    BufferedWriter smfile = SMGenerator.generateSmFromPath(bpm, startTime, bpmResult.bpmChanges, filename, outputDir, songTime);
     
     if( config.hardMode && isStepDebug() ) logger.fine("Hard mode enabled! Extra steps for you! ;-)");
     

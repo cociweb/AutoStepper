@@ -41,10 +41,10 @@ public class SMGenerator {
             "#CDTITLE:;\n" +
             "#MUSIC:$MUSICFILE;\n" +
             "#OFFSET:$STARTTIME;\n" +
-            "#SAMPLESTART:30.0;\n" +
-            "#SAMPLELENGTH:30.0;\n" +
+            "#SAMPLESTART:$SAMPLESTART;\n" +
+            "#SAMPLELENGTH:$SAMPLELENGTH;\n" +
             "#SELECTABLE:YES;\n" +
-            "#BPMS:0.000000=$BPM;\n" +
+            "#BPMS:$BPM;\n" +
             "#STOPS:;\n" +
             "#KEYSOUNDS:;\n" +
             "#ATTACKS:;";
@@ -107,7 +107,7 @@ public class SMGenerator {
     }
     
     public static BufferedWriter generateSmFromPath(float bpm, float startTime, File songfile, String outputdir) {
-        return generateSmFromPath(bpm, startTime, null, songfile, outputdir);
+        return generateSmFromPath(bpm, startTime, null, songfile, outputdir, 0f);
     }
     
     /**
@@ -117,8 +117,9 @@ public class SMGenerator {
      * @param bpmChanges List of BPM changes (timestamp, bpm pairs), or null for constant tempo
      * @param songfile Source audio file
      * @param outputdir Output directory
+     * @param songDuration Actual song duration in seconds (0 = use default 30s)
      */
-    public static BufferedWriter generateSmFromPath(float bpm, float startTime, ArrayList<AutoStepper.BPMChange> bpmChanges, File songfile, String outputdir) {
+    public static BufferedWriter generateSmFromPath(float bpm, float startTime, ArrayList<AutoStepper.BPMChange> bpmChanges, File songfile, String outputdir, float songDuration) {
         String filename = songfile.getName();
         
         // Extract and process song metadata
@@ -131,7 +132,7 @@ public class SMGenerator {
         File smfile = setupOutputFile(outputdir, filename);
         
         // Write SM file content
-        return writeSMFile(smfile, songfile, metadata, imgFileName, bpm, startTime, bpmChanges, filename);
+        return writeSMFile(smfile, songfile, metadata, imgFileName, bpm, startTime, bpmChanges, filename, songDuration);
     }
     
     private static class SongMetadata {
@@ -261,16 +262,22 @@ public class SMGenerator {
     }
     
     private static BufferedWriter writeSMFile(File smfile, File songfile, SongMetadata metadata, String imgFileName, float bpm, float startTime, String filename) {
-        return writeSMFile(smfile, songfile, metadata, imgFileName, bpm, startTime, null, filename);
+        return writeSMFile(smfile, songfile, metadata, imgFileName, bpm, startTime, null, filename, 0f);
     }
     
-    private static BufferedWriter writeSMFile(File smfile, File songfile, SongMetadata metadata, String imgFileName, float bpm, float startTime, ArrayList<AutoStepper.BPMChange> bpmChanges, String filename) {
+    private static BufferedWriter writeSMFile(File smfile, File songfile, SongMetadata metadata, String imgFileName, float bpm, float startTime, ArrayList<AutoStepper.BPMChange> bpmChanges, String filename, float songDuration) {
         try {
             deleteExistingSMFile(smfile);
             copyFileUsingStream(songfile, new File(smfile.getParent(), filename));
             
             // Format BPM string - either single BPM or multiple BPM changes
             String bpmString = formatBPMString(bpm, bpmChanges);
+            
+            // Calculate sample start and length
+            // For full songs (songDuration > 0), use actual duration
+            // Otherwise use default 30 seconds for preview
+            float sampleStart = (songDuration > 30f) ? 30.0f : 0.0f;
+            float sampleLength = (songDuration > 0f) ? songDuration : 30.0f;
             
             BufferedWriter writer = new BufferedWriter(new FileWriter(smfile));
             writer.write(HEADER.replace("$TITLE", metadata.shortName)
@@ -279,6 +286,8 @@ public class SMGenerator {
                              .replace("$BGIMAGE", imgFileName)
                              .replace("$MUSICFILE", filename)
                              .replace("$STARTTIME", Float.toString(startTime + AutoStepper.getStartSync()))
+                             .replace("$SAMPLESTART", Float.toString(sampleStart))
+                             .replace("$SAMPLELENGTH", Float.toString(sampleLength))
                              .replace("$BPM", bpmString));
             return writer;
         } catch(Exception e) {
