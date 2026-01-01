@@ -16,6 +16,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Logger;
 
 
@@ -119,7 +120,7 @@ public class SMGenerator {
      * @param outputdir Output directory
      * @param songDuration Actual song duration in seconds (0 = use default 30s)
      */
-    public static BufferedWriter generateSmFromPath(float bpm, float startTime, ArrayList<AutoStepper.BPMChange> bpmChanges, File songfile, String outputdir, float songDuration) {
+    public static BufferedWriter generateSmFromPath(float bpm, float startTime, List<AutoStepper.BPMChange> bpmChanges, File songfile, String outputdir, float songDuration) {
         String filename = songfile.getName();
         
         // Extract and process song metadata
@@ -132,7 +133,18 @@ public class SMGenerator {
         File smfile = setupOutputFile(outputdir, filename);
         
         // Write SM file content
-        return writeSMFile(smfile, songfile, metadata, imgFileName, bpm, startTime, bpmChanges, filename, songDuration);
+        SMFileConfig config = new SMFileConfig.Builder()
+            .smfile(smfile)
+            .songfile(songfile)
+            .metadata(metadata)
+            .imgFileName(imgFileName)
+            .bpm(bpm)
+            .startTime(startTime)
+            .bpmChanges(bpmChanges)
+            .filename(filename)
+            .songDuration(songDuration)
+            .build();
+        return writeSMFile(config);
     }
     
     private static class SongMetadata {
@@ -261,31 +273,78 @@ public class SMGenerator {
         return new File(dir, filename + ".sm");
     }
     
-    private static BufferedWriter writeSMFile(File smfile, File songfile, SongMetadata metadata, String imgFileName, float bpm, float startTime, String filename) {
-        return writeSMFile(smfile, songfile, metadata, imgFileName, bpm, startTime, null, filename, 0f);
+    /**
+     * Configuration object for SM file writing to reduce parameter count
+     */
+    private static class SMFileConfig {
+        final File smfile;
+        final File songfile;
+        final SongMetadata metadata;
+        final String imgFileName;
+        final float bpm;
+        final float startTime;
+        final List<AutoStepper.BPMChange> bpmChanges;
+        final String filename;
+        final float songDuration;
+        
+        private SMFileConfig(Builder builder) {
+            this.smfile = builder.smfile;
+            this.songfile = builder.songfile;
+            this.metadata = builder.metadata;
+            this.imgFileName = builder.imgFileName;
+            this.bpm = builder.bpm;
+            this.startTime = builder.startTime;
+            this.bpmChanges = builder.bpmChanges;
+            this.filename = builder.filename;
+            this.songDuration = builder.songDuration;
+        }
+        
+        static class Builder {
+            private File smfile;
+            private File songfile;
+            private SongMetadata metadata;
+            private String imgFileName;
+            private float bpm;
+            private float startTime;
+            private List<AutoStepper.BPMChange> bpmChanges;
+            private String filename;
+            private float songDuration;
+            
+            Builder smfile(File smfile) { this.smfile = smfile; return this; }
+            Builder songfile(File songfile) { this.songfile = songfile; return this; }
+            Builder metadata(SongMetadata metadata) { this.metadata = metadata; return this; }
+            Builder imgFileName(String imgFileName) { this.imgFileName = imgFileName; return this; }
+            Builder bpm(float bpm) { this.bpm = bpm; return this; }
+            Builder startTime(float startTime) { this.startTime = startTime; return this; }
+            Builder bpmChanges(List<AutoStepper.BPMChange> bpmChanges) { this.bpmChanges = bpmChanges; return this; }
+            Builder filename(String filename) { this.filename = filename; return this; }
+            Builder songDuration(float songDuration) { this.songDuration = songDuration; return this; }
+            
+            SMFileConfig build() { return new SMFileConfig(this); }
+        }
     }
     
-    private static BufferedWriter writeSMFile(File smfile, File songfile, SongMetadata metadata, String imgFileName, float bpm, float startTime, ArrayList<AutoStepper.BPMChange> bpmChanges, String filename, float songDuration) {
+    private static BufferedWriter writeSMFile(SMFileConfig config) {
         try {
-            deleteExistingSMFile(smfile);
-            copyFileUsingStream(songfile, new File(smfile.getParent(), filename));
+            deleteExistingSMFile(config.smfile);
+            copyFileUsingStream(config.songfile, new File(config.smfile.getParent(), config.filename));
             
             // Format BPM string - either single BPM or multiple BPM changes
-            String bpmString = formatBPMString(bpm, bpmChanges);
+            String bpmString = formatBPMString(config.bpm, config.bpmChanges);
             
             // Calculate sample start and length
             // For full songs (songDuration > 0), use actual duration
             // Otherwise use default 30 seconds for preview
-            float sampleStart = (songDuration > 30f) ? 30.0f : 0.0f;
-            float sampleLength = (songDuration > 0f) ? songDuration : 30.0f;
+            float sampleStart = (config.songDuration > 30f) ? 30.0f : 0.0f;
+            float sampleLength = (config.songDuration > 0f) ? config.songDuration : 30.0f;
             
-            BufferedWriter writer = new BufferedWriter(new FileWriter(smfile));
-            writer.write(HEADER.replace("$TITLE", metadata.shortName)
-                             .replace("$ARTIST", metadata.artist)
-                             .replace("$GENRE", metadata.genre)
-                             .replace("$BGIMAGE", imgFileName)
-                             .replace("$MUSICFILE", filename)
-                             .replace("$STARTTIME", Float.toString(startTime + AutoStepper.getStartSync()))
+            BufferedWriter writer = new BufferedWriter(new FileWriter(config.smfile));
+            writer.write(HEADER.replace("$TITLE", config.metadata.shortName)
+                             .replace("$ARTIST", config.metadata.artist)
+                             .replace("$GENRE", config.metadata.genre)
+                             .replace("$BGIMAGE", config.imgFileName)
+                             .replace("$MUSICFILE", config.filename)
+                             .replace("$STARTTIME", Float.toString(config.startTime + AutoStepper.getStartSync()))
                              .replace("$SAMPLESTART", Float.toString(sampleStart))
                              .replace("$SAMPLELENGTH", Float.toString(sampleLength))
                              .replace("$BPM", bpmString));
@@ -301,7 +360,7 @@ public class SMGenerator {
      * Format: timestamp1=bpm1,timestamp2=bpm2,...
      * Example: 0.000=128.000,64.000=256.000,164.000=156.000
      */
-    private static String formatBPMString(float defaultBpm, ArrayList<AutoStepper.BPMChange> bpmChanges) {
+    private static String formatBPMString(float defaultBpm, List<AutoStepper.BPMChange> bpmChanges) {
         if (bpmChanges == null || bpmChanges.isEmpty()) {
             // Single constant BPM
             return String.format("%.3f", defaultBpm);
@@ -314,7 +373,7 @@ public class SMGenerator {
             if (i > 0) {
                 sb.append(",");
             }
-            sb.append(String.format("%.3f=%.3f", change.timestamp, change.bpm));
+            sb.append(String.format("%.3f=%.3f", change.getTimestamp(), change.getBpm()));
         }
         return sb.toString();
     }
