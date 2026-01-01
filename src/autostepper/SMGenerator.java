@@ -219,8 +219,13 @@ public class SMGenerator {
     
     private static void downloadImage(String searchTerm, File imgFile) {
         try {
-            // Try Google Images
-            GoogleImageSearch.findAndSaveImage(searchTerm, imgFile.getAbsolutePath());
+            // Parse searchTerm back to artist and title
+            String[] parts = searchTerm.split(" ", 2);
+            String artist = parts.length > 0 ? parts[0] : "";
+            String title = parts.length > 1 ? parts[1] : "";
+            
+            // Try MusicBrainz cover art
+            MusicBrainzImageSearch.findAndSaveImage(artist, title, imgFile.getAbsolutePath());
         } catch (Exception e) {
             if (AutoStepper.isStepDebug()) logger.fine("Image search failed: " + e.getMessage());
         }

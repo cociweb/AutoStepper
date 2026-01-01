@@ -9,6 +9,52 @@ import java.util.logging.Logger;
 @SuppressWarnings("java:S00107")
 public class StepGenerator {
     
+    // Constants for better maintainability
+    // Constants for better maintainability
+    private static final int ARROW_COUNT = 4;
+    private static final int MAX_SIMULTANEOUS_HOLDS = 2;
+    private static final float MIN_JUMP_INTERVAL_WITH_MINES = 2.0f;
+    private static final float MIN_JUMP_INTERVAL_NORMAL = 4.0f;
+    private static final int MINE_SPAWN_CHANCE = 8;
+    private static final int MINE_COUNTDOWN_RESET = 8;
+    private static final String EMPTY_NOTE_LINE = "0000";
+    private static final float SUSTAINED_FFT_LENGTH = 0.75f;
+    private static final float SUSTAINED_FFT_THRESHOLD = 0.25f;
+    private static final float SUSTAINED_FFT_MULTIPLIER = 0.45f;
+    
+    // Utility methods to reduce code duplication
+    
+    /**
+     * Checks if an array element is empty and not being held
+     * @param index The arrow index to check
+     * @param noteLine The current note line
+     * @return true if the position is available for a mine
+     */
+    private boolean isPositionAvailableForMine(int index, char[] noteLine) {
+        return noteLine[index] == empty && holding[index] <= 0f;
+    }
+    
+    /**
+     * Clears all holds in the holding array
+     */
+    private void clearAllHolds() {
+        for(int i = 0; i < ARROW_COUNT; i++) {
+            holding[i] = 0f;
+        }
+    }
+    
+    /**
+     * Initializes a note line array with empty notes
+     * @return A new char array filled with empty notes
+     */
+    private char[] createEmptyNoteLine() {
+        char[] noteLine = new char[ARROW_COUNT];
+        for(int i = 0; i < ARROW_COUNT; i++) {
+            noteLine[i] = empty;
+        }
+        return noteLine;
+    }
+    
     // https://github.com/stepmania/stepmania/wiki/Note-Types
     private char empty = '0';
     private char stop = '3';
@@ -18,7 +64,7 @@ public class StepGenerator {
     
     private static final Logger logger = Logger.getLogger(StepGenerator.class.getName());
     
-    private float[] holding = new float[4];
+    private float[] holding = new float[ARROW_COUNT];
     private float lastJumpTime;
     private ArrayList<char[]> allNoteLines = new ArrayList<>();
     private int mineCount;
@@ -27,10 +73,9 @@ public class StepGenerator {
     
     private int getHoldCount() {
         int ret = 0;
-        if( holding[0] > 0f ) ret++;
-        if( holding[1] > 0f ) ret++;
-        if( holding[2] > 0f ) ret++;
-        if( holding[3] > 0f ) ret++;
+        for(int i = 0; i < ARROW_COUNT; i++) {
+            if(holding[i] > 0f) ret++;
+        }
         return ret;
     }
     
@@ -38,7 +83,7 @@ public class StepGenerator {
         int hc = getHoldCount();
         if(hc == 0) return -1;
         int pickHold = rand.nextInt(hc);
-        for(int i=0;i<4;i++) {
+        for(int i=0; i<ARROW_COUNT; i++) {
             if( holding[i] > 0f ) {
                 if( pickHold == 0 ) return i;
                 pickHold--;
@@ -49,11 +94,7 @@ public class StepGenerator {
     
     // make a note line, with lots of checks, balances & filtering
     private char[] getHoldStops(int currentHoldCount, int holds) {
-        char[] holdstops = new char[4];
-        holdstops[0] = empty;
-        holdstops[1] = empty;
-        holdstops[2] = empty;
-        holdstops[3] = empty;
+        char[] holdstops = createEmptyNoteLine();
         if( currentHoldCount > 0 ) {
             processNegativeHolds(holds, holdstops, currentHoldCount);
             updateExistingHolds(holdstops, currentHoldCount);
@@ -86,7 +127,7 @@ public class StepGenerator {
     }
     
     private int updateExistingHolds(char[] holdstops, int currentHoldCount) {
-        for(int i=0;i<4;i++) {
+        for(int i=0; i<ARROW_COUNT; i++) {
             if( holding[i] > 0f ) {
                 holding[i] -= 1f;
                 if( holding[i] <= 0f ) {
@@ -99,8 +140,13 @@ public class StepGenerator {
         return currentHoldCount;
     }
     
+    /**
+     * Gets a note line by index, returns empty line if out of bounds
+     * @param i The index of the note line
+     * @return String representation of the note line
+     */
     private String getNoteLineIndex(int i) {
-        if( i < 0 || i >= allNoteLines.size() ) return "" + empty + empty + empty + empty;
+        if( i < 0 || i >= allNoteLines.size() ) return EMPTY_NOTE_LINE;
         return String.valueOf(allNoteLines.get(i));
     }
     
@@ -143,7 +189,7 @@ public class StepGenerator {
     }
     
     private int reduceJumpsIfNeeded(boolean[] placeStep, int steps, float time, boolean mines) {
-        if( steps > 1 && time - lastJumpTime < (mines ? 2f : 4f) ) {
+        if( steps > 1 && time - lastJumpTime < (mines ? MIN_JUMP_INTERVAL_WITH_MINES : MIN_JUMP_INTERVAL_NORMAL) ) {
             // Create new placement with single step
             for(int i=0;i<4;i++) {
                 if(placeStep[i]) {
@@ -161,9 +207,9 @@ public class StepGenerator {
     
     private int adjustHoldsAndSteps(boolean[] placeStep, int holds, int steps) {
         int currentHoldCount = getHoldCount(); 
-        if( holds + currentHoldCount > 2 ) holds = 2 - currentHoldCount;
-        if( steps + currentHoldCount > 2 ) {
-            int toReduce = steps + currentHoldCount - 2;
+        if( holds + currentHoldCount > MAX_SIMULTANEOUS_HOLDS ) holds = MAX_SIMULTANEOUS_HOLDS - currentHoldCount;
+        if( steps + currentHoldCount > MAX_SIMULTANEOUS_HOLDS ) {
+            int toReduce = steps + currentHoldCount - MAX_SIMULTANEOUS_HOLDS;
             for(int i=3;i>=0;i--) {
                 if(toReduce > 0 && placeStep[i]) {
                     placeStep[i] = false;
@@ -175,50 +221,78 @@ public class StepGenerator {
         return holds;
     }
     
+    /**
+     * Adds mines to the note line based on random chance
+     * @param noteLine The current note line to potentially add mines to
+     * @return The modified note line with mines added
+     */
     private char[] addMines(char[] noteLine) {
         mineCount--;
         if( mineCount <= 0 ) {
-            mineCount = rand.nextInt(8);
-            if( rand.nextInt(8) == 0 && noteLine[0] == empty && holding[0] <= 0f ) noteLine[0] = mine;
-            if( rand.nextInt(8) == 0 && noteLine[1] == empty && holding[1] <= 0f ) noteLine[1] = mine;
-            if( rand.nextInt(8) == 0 && noteLine[2] == empty && holding[2] <= 0f ) noteLine[2] = mine;
-            if( rand.nextInt(8) == 0 && noteLine[3] == empty && holding[3] <= 0f ) noteLine[3] = mine;
+            mineCount = rand.nextInt(MINE_COUNTDOWN_RESET);
+            for(int i = 0; i < ARROW_COUNT; i++) {
+                if( rand.nextInt(MINE_SPAWN_CHANCE) == 0 && isPositionAvailableForMine(i, noteLine) ) {
+                    noteLine[i] = mine;
+                }
+            }
         }
         return noteLine;
     }
     
+    /**
+     * Determines if a note line should be retried due to duplication
+     * @param completeLine The current complete note line
+     * @param lastLine The previous note line
+     * @return true if the line should be regenerated
+     */
     private boolean shouldRetryLine(String completeLine, String lastLine) {
-        return completeLine.equals(lastLine) && !completeLine.equals("0000");
+        return completeLine.equals(lastLine) && !completeLine.equals(EMPTY_NOTE_LINE);
     }
     
     private char[] retryWithRandomPlacement(boolean[] placeStep, int holds) {
         ArrayList<Integer> avail = new ArrayList<>();
-        for(int i=0;i<4;i++) if(placeStep[i] && holding[i] <= 0f) avail.add(i);
+        for(int i=0; i<ARROW_COUNT; i++) if(placeStep[i] && holding[i] <= 0f) avail.add(i);
         if(!avail.isEmpty()) {
             int idx = rand.nextInt(avail.size());
             int alt = avail.get(idx);
-            boolean[] altPlace = new boolean[4];
+            boolean[] altPlace = new boolean[ARROW_COUNT];
             altPlace[alt] = true;
             int currentHoldCount = getHoldCount();
-            if( holds + currentHoldCount > 2 ) holds = 2 - currentHoldCount;
+            if( holds + currentHoldCount > MAX_SIMULTANEOUS_HOLDS ) holds = MAX_SIMULTANEOUS_HOLDS - currentHoldCount;
             char[] noteLine = getHoldStops(currentHoldCount, holds);
             String completeLine = String.valueOf(noteLine);
-            if( completeLine.equals(getLastNoteLine()) && !completeLine.equals("0000") ) {
+            if( completeLine.equals(getLastNoteLine()) && !completeLine.equals(EMPTY_NOTE_LINE) ) {
                 return noteLine;
             }
         }
         return getHoldStops(getHoldCount(), holds);
     }
     
+    /**
+     * Checks if a time is near any time in the list within threshold
+     * Optimized with early exit when times exceed threshold
+     * @param time The time to check
+     * @param timelist List of times to compare against
+     * @param threshold Maximum distance to consider "near"
+     * @return true if time is near any time in the list
+     */
     private boolean isNearATime(float time, TFloatArrayList timelist, float threshold) {
-        for(int i=0;i<timelist.size();i++) {
+        for(int i=0; i<timelist.size(); i++) {
             float checktime = timelist.get(i);
             if( Math.abs(checktime - time) <= threshold ) return true;
+            // Early exit optimization - list is sorted by time
             if( checktime > time + threshold ) return false;
         }
         return false;
     }
     
+    /**
+     * Gets FFT value at a specific time with bounds checking
+     * @param time The time in seconds
+     * @param fftMaxes Array of FFT maximum values
+     * @param timePerFft Time duration per FFT sample
+     * @return FFT value at the time, or 0 if out of bounds
+     */
     private float getFft(float time, TFloatArrayList fftMaxes, float timePerFft) {
         int index = (int)Math.floor(time / timePerFft);
         if( index >= 0 && index < fftMaxes.size() ) {
@@ -274,6 +348,10 @@ public class StepGenerator {
         return true;
     }
     
+    /**
+     * Checks if FFT values are sustained above threshold for a duration
+     * Convenience method that creates config and delegates to main implementation
+     */
     @SuppressWarnings("all")
     private boolean sustainedFft(float startTime, float len, float granularity, float timePerFft, TFloatArrayList fftMaxes, TFloatArrayList fftAvg, float aboveAvg, float averageMultiplier) {
         SustainedFftConfig config = new SustainedFftConfig(startTime, len, granularity, timePerFft, fftMaxes, fftAvg, aboveAvg, averageMultiplier);
@@ -332,13 +410,14 @@ public class StepGenerator {
         return generateNotes(config);
     }
     
+    /**
+     * Resets the generator state for a new note generation session
+     * @param stepGranularity The granularity for step placement
+     */
     private void resetState(int stepGranularity) {
         allNoteLines.clear();
         lastJumpTime = -10f;
-        holding[0] = 0f;
-        holding[1] = 0f;
-        holding[2] = 0f;
-        holding[3] = 0f;
+        clearAllHolds();
         commaSeperatorReset = 4 * stepGranularity;
     }
     
@@ -348,11 +427,11 @@ public class StepGenerator {
         for(float t = config.timeOffset; t <= config.totalTime; t += timeGranularity) {
             StepDecision decision = analyzeStepTiming(t, config, timeIndex);
             if( AutoStepper.isStepDebug() ) {
-                boolean[] debugSteps = new boolean[4];
+                boolean[] debugSteps = new boolean[ARROW_COUNT];
                 debugSteps[0] = (timeIndex % 2 == 0);
                 makeNoteLine(getLastNoteLine(), t, debugSteps, -2, config.allowMines);
             } else {
-                boolean[] stepArray = new boolean[4];
+                boolean[] stepArray = new boolean[ARROW_COUNT];
                 if( decision.steps > 0 ) {
                     stepArray[0] = true; // Place step on first arrow
                 }
@@ -363,12 +442,19 @@ public class StepGenerator {
         return formatOutput();
     }
     
+    /**
+     * Analyzes timing to determine step placement decisions
+     * @param t Current time in seconds
+     * @param config Note generation configuration
+     * @param timeIndex Current time index in the sequence
+     * @return StepDecision containing step and hold counts
+     */
     private StepDecision analyzeStepTiming(float t, NoteGenerationConfig config, int timeIndex) {
         StepDecision decision = new StepDecision();
         if( t > 0f ) {
             float fftmax = getFft(t, config.fftMaxes, config.timePerFft);
-            boolean sustained = sustainedFft(t, 0.75f, config.timePerBeat / config.stepGranularity, 
-                                           config.timePerFft, config.fftMaxes, config.fftAverages, 0.25f, 0.45f);
+            boolean sustained = sustainedFft(t, SUSTAINED_FFT_LENGTH, config.timePerBeat / config.stepGranularity, 
+                                           config.timePerFft, config.fftMaxes, config.fftAverages, SUSTAINED_FFT_THRESHOLD, SUSTAINED_FFT_MULTIPLIER);
             boolean nearKick = isNearATime(t, config.fewTimes[AutoStepper.KICKS], config.timePerBeat / config.stepGranularity);
             boolean nearSnare = isNearATime(t, config.fewTimes[AutoStepper.SNARE], config.timePerBeat / config.stepGranularity);
             boolean nearEnergy = isNearATime(t, config.fewTimes[AutoStepper.ENERGY], config.timePerBeat / config.stepGranularity);
@@ -410,8 +496,15 @@ public class StepGenerator {
         int holds = 0;
     }
     
+    /**
+     * Formats the generated notes into final output string
+     * Optimized with capacity hint to reduce memory allocations
+     * @return Formatted note string ready for SM file
+     */
     private String formatOutput() {
-        StringBuilder allNotes = new StringBuilder();
+        // Pre-allocate StringBuilder capacity (estimate: 6 chars per line)
+        int estimatedCapacity = allNoteLines.size() * 6;
+        StringBuilder allNotes = new StringBuilder(estimatedCapacity);
         buildNoteLines(allNotes);
         fillEmptyLines(allNotes);
         String[] lines = allNotes.toString().split("\n");
@@ -420,9 +513,13 @@ public class StepGenerator {
         return allNotes.toString();
     }
     
+    /**
+     * Builds note lines into StringBuilder with proper formatting
+     * @param allNotes The StringBuilder to append note lines to
+     */
     private void buildNoteLines(StringBuilder allNotes) {
         commaSeperator = commaSeperatorReset;
-        for(int i=0;i<allNoteLines.size();i++) {
+        for(int i=0; i<allNoteLines.size(); i++) {
             allNotes.append(getNoteLineIndex(i)).append("\n");
             commaSeperator--;
             if( commaSeperator == 0 ) {
@@ -432,6 +529,10 @@ public class StepGenerator {
         }
     }
     
+    /**
+     * Fills remaining lines with stop notes to complete the measure
+     * @param allNotes The StringBuilder to append stop notes to
+     */
     private void fillEmptyLines(StringBuilder allNotes) {
         while( commaSeperator > 0 ) {
             allNotes.append("3333");
@@ -440,6 +541,11 @@ public class StepGenerator {
         }
     }
     
+    /**
+     * Calculates statistics about the generated notes
+     * @param lines Array of note lines to analyze
+     * @return NoteStatistics object with counts of different note types
+     */
     private NoteStatistics calculateStatistics(String[] lines) {
         NoteStatistics stats = new NoteStatistics();
         for (String line : lines) {
@@ -456,6 +562,10 @@ public class StepGenerator {
         return stats;
     }
     
+    /**
+     * Logs statistics about the generated notes
+     * @param stats The statistics to log
+     */
     private void logStatistics(NoteStatistics stats) {
         if (logger.isLoggable(java.util.logging.Level.INFO)) {
             logger.info(String.format("Taps: %d, Jumps: %d, Hands: %d, Quads: %d, Holds: %d, Mines: %d", 

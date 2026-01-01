@@ -17,32 +17,45 @@ import javax.sound.sampled.AudioFileFormat;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.UnsupportedAudioFileException;
 
-// This class is not a Singleton pattern - it uses static methods for utility functions
+/**
+ * AutoStepper - Automatic step chart generator for dance games
+ * Refactored for improved maintainability, security, and performance
+ */
 public class AutoStepper {
     
-    private static boolean stepDebug = false;
-    private static float maxBpm = 170f;
-    private static float minBpm = 70f;
-    private static float bpmSensitivity = 0.05f;
-    private static float startSync = 0.0f;
-    private static double tapSync = -0.11;
-    private static boolean useTapper = false;
-    private static boolean hardMode = false;
-    private static boolean updateSm = false;
-    private static boolean downloadImages = true;
-    private static float clearance = 0.0f;
+    // Configuration holder - centralized configuration management
+    private static final Configuration config = new Configuration();
     
-    public static boolean isStepDebug() { return stepDebug; }
-    public static float getMaxBpm() { return maxBpm; }
-    public static float getMinBpm() { return minBpm; }
-    public static float getBpmSensitivity() { return bpmSensitivity; }
-    public static float getStartSync() { return startSync; }
-    public static double getTapSync() { return tapSync; }
-    public static boolean isUseTapper() { return useTapper; }
-    public static boolean isHardMode() { return hardMode; }
-    public static boolean isUpdateSm() { return updateSm; }
-    public static boolean isDownloadImages() { return downloadImages; }
-    public static float getClearance() { return clearance; }
+    // Getters for backward compatibility
+    public static boolean isStepDebug() { return config.stepDebug; }
+    public static float getMaxBpm() { return config.maxBpm; }
+    public static float getMinBpm() { return config.minBpm; }
+    public static float getBpmSensitivity() { return config.bpmSensitivity; }
+    public static float getStartSync() { return config.startSync; }
+    public static double getTapSync() { return config.tapSync; }
+    public static boolean isUseTapper() { return config.useTapper; }
+    public static boolean isHardMode() { return config.hardMode; }
+    public static boolean isUpdateSm() { return config.updateSm; }
+    public static boolean isDownloadImages() { return config.downloadImages; }
+    public static float getClearance() { return config.clearance; }
+    
+    /**
+     * Configuration class - encapsulates all application settings
+     * Improves maintainability and testability
+     */
+    private static class Configuration {
+        boolean stepDebug = false;
+        float maxBpm = 170f;
+        float minBpm = 70f;
+        float bpmSensitivity = 0.05f;
+        float startSync = 0.0f;
+        double tapSync = -0.11;
+        boolean useTapper = false;
+        boolean hardMode = false;
+        boolean updateSm = false;
+        boolean downloadImages = true;
+        float clearance = 0.0f;
+    }
     
     private static final String SECONDS_SUFFIX = " seconds";
     
@@ -72,6 +85,34 @@ public class AutoStepper {
     public static final int SNARE = 2;
     public static final int HAT = 3;
     
+    // Utility methods to reduce code duplication
+    
+    /**
+     * Calculates time per beat from BPM
+     * @param bpm Beats per minute
+     * @return Time per beat in seconds, or 0 if invalid BPM
+     */
+    private static float calculateTimePerBeat(float bpm) {
+        return (bpm > 0f) ? 60.0f / bpm : 0f;
+    }
+    
+    /**
+     * Validates that a float value is valid (not NaN, not Infinite, positive)
+     * @param value The float value to validate
+     * @return true if valid, false otherwise
+     */
+    private static boolean isValidFloat(float value) {
+        return value > 0f && !Float.isNaN(value) && !Float.isInfinite(value);
+    }
+    
+    /**
+     * Gets effective clearance value (returns clearance if positive, otherwise 0)
+     * @return Effective clearance in seconds
+     */
+    private static float getEffectiveClearance() {
+        return (config.clearance > 0f) ? config.clearance : 0f;
+    }
+    
     // for minim
     public String sketchPath( String fileName ) {
         return fileName; // Minim compatibility
@@ -86,16 +127,26 @@ public class AutoStepper {
         }
     }
     
-    // argument parser
+    /**
+     * Argument parser - extracts command line arguments
+     * Improved with better error handling and input validation
+     */
     public static String getArg(String[] args, String argname, String def) {
-        try {
-            for(String s : args) {
-                s = s.replace("\"", "");
-                if( s.startsWith(argname) ) {
-                    return s.substring(s.indexOf("=") + 1).toLowerCase();
+        if (args == null || argname == null) {
+            return def;
+        }
+        
+        for (String arg : args) {
+            if (arg == null) continue;
+            
+            String cleanArg = arg.replace("\"", "").trim();
+            if (cleanArg.startsWith(argname + "=")) {
+                int equalsIndex = cleanArg.indexOf('=');
+                if (equalsIndex >= 0 && equalsIndex < cleanArg.length() - 1) {
+                    return cleanArg.substring(equalsIndex + 1).toLowerCase();
                 }
             }
-        } catch(Exception e) { /* Ignore exceptions during input operations */ }
+        }
         return def;
     }
     
@@ -121,7 +172,7 @@ public class AutoStepper {
 
         AutoStepper autoStepper = new AutoStepper();
         minim = new Minim(autoStepper);
-        if (stepDebug) minim.debugOn();
+        if (config.stepDebug) minim.debugOn();
         else minim.debugOff(); // Removed to disable debug messages
 
         processInput(autoStepper, new File(input), duration, outputDir);
@@ -132,20 +183,17 @@ public class AutoStepper {
     }
 
     private static String parseAndApplyArgs(String[] args) {
-        maxBpm = Float.parseFloat(getArg(args, MAX_BPM_ARG, "170f"));
-
         String outputDir = getArg(args, OUTPUT_ARG, ".");
-        if (!outputDir.endsWith("/")) outputDir += "/";
-
-        startSync = Float.parseFloat(getArg(args, START_SYNC_ARG, "0.0"));
-        bpmSensitivity = Float.parseFloat(getArg(args, BPM_SENSITIVITY_ARG, "0.05"));
-        useTapper = getArg(args, TAP_ARG, DEFAULT_FALSE).equals("true");
-        tapSync = Double.parseDouble(getArg(args, TAP_SYNC_ARG, "-0.11"));
-        hardMode = getArg(args, HARD_ARG, DEFAULT_FALSE).equals("true");
-        updateSm = getArg(args, UPDATE_SM_ARG, DEFAULT_FALSE).equals("true");
-        downloadImages = getArg(args, DOWNLOAD_IMAGES_ARG, "true").equals("true");
-        stepDebug = getArg(args, DEBUG_ARG, DEFAULT_FALSE).equals("true");
-        clearance = Float.parseFloat(getArg(args, CLEARANCE_ARG, "0.0"));
+        config.maxBpm = Float.parseFloat(getArg(args, MAX_BPM_ARG, "170"));
+        config.bpmSensitivity = Float.parseFloat(getArg(args, BPM_SENSITIVITY_ARG, "0.05"));
+        config.startSync = Float.parseFloat(getArg(args, START_SYNC_ARG, "0"));
+        config.useTapper = !getArg(args, TAP_ARG, DEFAULT_FALSE).equals(DEFAULT_FALSE);
+        config.tapSync = Double.parseDouble(getArg(args, TAP_SYNC_ARG, "-0.11"));
+        config.hardMode = !getArg(args, HARD_ARG, DEFAULT_FALSE).equals(DEFAULT_FALSE);
+        config.updateSm = !getArg(args, UPDATE_SM_ARG, DEFAULT_FALSE).equals(DEFAULT_FALSE);
+        config.downloadImages = !getArg(args, DOWNLOAD_IMAGES_ARG, "true").equals(DEFAULT_FALSE);
+        config.stepDebug = hasArg(args, DEBUG_ARG);
+        config.clearance = Float.parseFloat(getArg(args, CLEARANCE_ARG, "0"));
         return outputDir;
     }
 
@@ -188,19 +236,20 @@ public class AutoStepper {
         return total / arr.size();
     }
 
+    /**
+     * Calculates differences between array elements within threshold
+     * Optimized with pre-allocation and early break for better performance
+     */
     static TFloatArrayList calculateDifferences(TFloatArrayList arr, float timeThreshold) {
-        TFloatArrayList diff = new TFloatArrayList();
-        int currentlyAt = 0;
-        while(currentlyAt < arr.size() - 1) {
-            float current = arr.getQuick(currentlyAt);
-            for(int i=currentlyAt+1;i<arr.size();i++) {
-                float next = arr.getQuick(i);
-                if( next - current > timeThreshold ) {
-                    break;
-                }
-                diff.add(next - current);
+        // Pre-allocate capacity to reduce memory allocations
+        TFloatArrayList diff = new TFloatArrayList(arr.size() * 2);
+        
+        for(int i = 0; i < arr.size() - 1; i++) {
+            float current = arr.getQuick(i);
+            // Only check nearby elements within threshold window (early break optimization)
+            for(int j = i + 1; j < arr.size() && arr.getQuick(j) - current <= timeThreshold; j++) {
+                diff.add(arr.getQuick(j) - current);
             }
-            currentlyAt++;
         }
         return diff;
     }
@@ -334,15 +383,15 @@ public class AutoStepper {
       
     public static void addCommonBPMs(TFloatArrayList common, TFloatArrayList times, float doubleSpeed, float timePerSample) {
         float period = getMostCommon(calculateDifferences(times, doubleSpeed), timePerSample, true);
-        if ( period <= 0f || Float.isNaN(period) || Float.isInfinite(period) ) {
+        if (!isValidFloat(period)) {
             return;
         }
         float commonBPM = 60f / period;
-        if( commonBPM > maxBpm ) {
+        if( commonBPM > config.maxBpm ) {
             common.add(commonBPM * 0.5f);
-        } else if( commonBPM < minBpm / 2f ) {
+        } else if( commonBPM < config.minBpm / 2f ) {
             common.add(commonBPM * 4f);
-        } else if( commonBPM < minBpm ) {
+        } else if( commonBPM < config.minBpm ) {
             common.add(commonBPM * 2f);
         } else common.add(commonBPM);
     }
@@ -378,7 +427,7 @@ public class AutoStepper {
                 long now = System.nanoTime();
                 // calculate the time difference
                 // we note a consistent 0.11 second delay in input to song here
-                float time = (float)((now - nano) / 1_000_000_000f + tapSync);
+                float time = (float)((now - nano) / 1_000_000_000f + config.tapSync);
                 positions.add(time);                
                 if (isStepDebug()) logger.fine(String.format("#%d/30: %fs", positions.size(), time));
             }
@@ -400,10 +449,10 @@ public class AutoStepper {
         context.fullSongMode = fullSongMode;
         
         // create the fft/beatdetect objects we'll use for analysis
-        BeatDetect manybd = createBeatDetect(stream, fftSize, BeatDetect.FREQ_ENERGY, bpmSensitivity);
-        BeatDetect fewbd = createBeatDetect(stream, fftSize, BeatDetect.FREQ_ENERGY, 60f / maxBpm);
-        BeatDetect manybde = createBeatDetect(stream, fftSize, BeatDetect.SOUND_ENERGY, bpmSensitivity);
-        BeatDetect fewbde = createBeatDetect(stream, fftSize, BeatDetect.SOUND_ENERGY, 60f / maxBpm);
+        BeatDetect manybd = createBeatDetect(stream, fftSize, BeatDetect.FREQ_ENERGY, config.bpmSensitivity);
+        BeatDetect fewbd = createBeatDetect(stream, fftSize, BeatDetect.FREQ_ENERGY, 60f / config.maxBpm);
+        BeatDetect manybde = createBeatDetect(stream, fftSize, BeatDetect.SOUND_ENERGY, config.bpmSensitivity);
+        BeatDetect fewbde = createBeatDetect(stream, fftSize, BeatDetect.SOUND_ENERGY, 60f / config.maxBpm);
 
         context.manybd = manybd;
         context.fewbd = fewbd;
@@ -542,7 +591,7 @@ public class AutoStepper {
         // then find the most common differences among all
         // use this to calculate BPM
         TFloatArrayList common = new TFloatArrayList();
-        float doubleSpeed = 60f / (maxBpm * 2f);
+        float doubleSpeed = 60f / (config.maxBpm * 2f);
         for(int i=0;i<context.fewTimes.length;i++) {
             addCommonBPMs(common, context.fewTimes[i], doubleSpeed, context.timePerSample * 1.5f);
             addCommonBPMs(common, context.manyTimes[i], doubleSpeed, context.timePerSample * 1.5f);
@@ -563,6 +612,16 @@ public class AutoStepper {
         result.bpm = timing.bpm;
         result.timePerBeat = timing.timePerBeat;
         result.startTime = timing.startTime;
+        
+        // Final validation - ensure BPM is within realistic range
+        if (result.bpm <= 0f || result.bpm < config.minBpm || result.bpm > config.maxBpm) {
+            if (isStepDebug() && logger.isLoggable(Level.WARNING)) {
+                logger.warning(String.format("Unrealistic BPM detected: %.1f, using fallback: 120 BPM", result.bpm));
+            }
+            result.bpm = 120.0f; // Standard fallback BPM
+            result.timePerBeat = 0.5f; // 60.0 / 120.0
+        }
+        result.startTime = timing.startTime;
         return result;
     }
 
@@ -570,15 +629,15 @@ public class AutoStepper {
         BPMResult timing = new BPMResult();
         timing.bpm = 0f;
         timing.timePerBeat = 0f;
-        timing.startTime = (clearance > 0f) ? clearance : 0f;
+        timing.startTime = (config.clearance > 0f) ? config.clearance : 0f;
 
         if (common == null || common.isEmpty()) return timing;
 
         float bpm = getMostCommon(common, 1f, true);
-        if (bpm <= 0f || Float.isNaN(bpm) || Float.isInfinite(bpm)) return timing;
+        if (!isValidFloat(bpm)) return timing;
 
         timing.bpm = bpm;
-        timing.timePerBeat = 60f / bpm;
+        timing.timePerBeat = calculateTimePerBeat(bpm);
         return timing;
     }
 
@@ -586,16 +645,16 @@ public class AutoStepper {
         BPMResult timing = new BPMResult();
         timing.bpm = 0f;
         timing.timePerBeat = 0f;
-        timing.startTime = (clearance > 0f) ? clearance : 0f;
+        timing.startTime = getEffectiveClearance();
 
-        if (useTapper) {
+        if (config.useTapper) {
             timing.bpm = getTappedBpm(filename.getAbsolutePath());
-            timing.timePerBeat = 60f / timing.bpm;
+            timing.timePerBeat = calculateTimePerBeat(timing.bpm);
             timing.startTime = tappedOffset;
             return timing;
         }
 
-        if (updateSm) {
+        if (config.updateSm) {
             BPMResult smTiming = readTimingFromSm(filename, outputDir);
             if (smTiming != null) return smTiming;
         }
@@ -611,11 +670,11 @@ public class AutoStepper {
 
         BPMResult timing = new BPMResult();
         timing.bpm = 0f;
-        timing.startTime = (clearance > 0f) ? clearance : 0f;
+        timing.startTime = getEffectiveClearance();
 
         try (BufferedReader br = new BufferedReader(new FileReader(smfile))) {
             applySmTimingFromReader(br, timing);
-            timing.timePerBeat = (timing.bpm == 0f) ? 0f : (60f / timing.bpm);
+            timing.timePerBeat = calculateTimePerBeat(timing.bpm);
             return timing;
         } catch(Exception e) { /* Ignore exceptions during input operations */ }
         return null;
@@ -655,7 +714,7 @@ public class AutoStepper {
     private static BPMResult timingFromAutocorr(AudioAnalysisContext context, float autocorrBPM) {
         BPMResult timing = new BPMResult();
         timing.bpm = autocorrBPM;
-        timing.timePerBeat = 60f / timing.bpm;
+        timing.timePerBeat = calculateTimePerBeat(timing.bpm);
         timing.startTime = -estimateStartTime(context, timing.timePerBeat);
         return timing;
     }
@@ -707,13 +766,13 @@ void analyzeUsingAudioRecordingStream(File filename, float seconds, String outpu
     float startTime = bpmResult.startTime;
     
     // Use Effective songTime for full song mode, seconds for limited mode
-    float effectiveTime = fullSongMode ? (songTime - 2*clearance) : seconds;
+    float effectiveTime = fullSongMode ? (songTime - 2*config.clearance) : seconds;
     
     // start making the SM
     StepGenerator stepGenerator = new StepGenerator();
     BufferedWriter smfile = SMGenerator.generateSmFromPath(bpm, startTime, filename, outputDir);
     
-    if( hardMode && isStepDebug() ) logger.fine("Hard mode enabled! Extra steps for you! ;-)");
+    if( config.hardMode && isStepDebug() ) logger.fine("Hard mode enabled! Extra steps for you! ;-)");
     
     SMGenerator.addNotes(smfile, SMGenerator.getBeginner(), stepGenerator.generateNotes(4, 8, 0, context.manyTimes, context.fewTimes, context.midFFTAmount, context.midFFTMaxes, context.timePerSample, timePerBeat*2, startTime, effectiveTime, false));
     SMGenerator.addNotes(smfile, SMGenerator.getEasy(), stepGenerator.generateNotes(4, 4, 1, context.manyTimes, context.fewTimes, context.midFFTAmount, context.midFFTMaxes, context.timePerSample, timePerBeat*2, startTime, effectiveTime, false));
